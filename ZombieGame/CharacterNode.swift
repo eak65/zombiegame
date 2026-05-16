@@ -6,7 +6,8 @@ class CharacterNode: SKNode {
 
     private(set) var kind: Kind
     var isBeingBitten = false
-    var targetHuman: CharacterNode?
+    var targetHuman:  CharacterNode?   // AI zombies
+    var wanderTarget: CGPoint?          // humans
 
     private var icon: SKLabelNode!
 
@@ -94,11 +95,11 @@ class CharacterNode: SKNode {
     }
 
     func becomeZombie() {
-        kind = .aiZombie
+        kind          = .aiZombie
         isBeingBitten = false
+        wanderTarget  = nil
         icon.removeAction(forKey: "breathe")
         icon.text = "🧟"
-        // Flash effect
         run(.sequence([
             .fadeAlpha(to: 0.2, duration: 0.12),
             .fadeAlpha(to: 1.0, duration: 0.12),

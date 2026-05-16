@@ -12,6 +12,7 @@
 		DEAD000100000013CAFEBABE /* GameScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000003CAFEBABE /* GameScene.swift */; };
 		DEAD000100000014CAFEBABE /* CharacterNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000004CAFEBABE /* CharacterNode.swift */; };
 		DEAD000100000015CAFEBABE /* JoystickNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000005CAFEBABE /* JoystickNode.swift */; };
+		DEAD00010000001ACAFEBABE /* CityMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000ACAFEBABE /* CityMap.swift */; };
 		DEAD000100000016CAFEBABE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DEAD000100000006CAFEBABE /* Assets.xcassets */; };
 		DEAD000100000017CAFEBABE /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = DEAD000100000007CAFEBABE /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
@@ -22,6 +23,7 @@
 		DEAD000100000003CAFEBABE /* GameScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameScene.swift; sourceTree = "<group>"; };
 		DEAD000100000004CAFEBABE /* CharacterNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterNode.swift; sourceTree = "<group>"; };
 		DEAD000100000005CAFEBABE /* JoystickNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoystickNode.swift; sourceTree = "<group>"; };
+		DEAD00010000000ACAFEBABE /* CityMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityMap.swift; sourceTree = "<group>"; };
 		DEAD000100000006CAFEBABE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DEAD000100000007CAFEBABE /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		DEAD000100000008CAFEBABE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -47,6 +49,7 @@
 				DEAD000100000003CAFEBABE /* GameScene.swift */,
 				DEAD000100000004CAFEBABE /* CharacterNode.swift */,
 				DEAD000100000005CAFEBABE /* JoystickNode.swift */,
+				DEAD00010000000ACAFEBABE /* CityMap.swift */,
 				DEAD000100000006CAFEBABE /* Assets.xcassets */,
 				DEAD000100000007CAFEBABE /* LaunchScreen.storyboard */,
 				DEAD000100000008CAFEBABE /* Info.plist */,
@@ -145,6 +148,7 @@
 				DEAD000100000013CAFEBABE /* GameScene.swift in Sources */,
 				DEAD000100000014CAFEBABE /* CharacterNode.swift in Sources */,
 				DEAD000100000015CAFEBABE /* JoystickNode.swift in Sources */,
+				DEAD00010000001ACAFEBABE /* CityMap.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
