@@ -12,8 +12,11 @@
 		DEAD000100000013CAFEBABE /* GameScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000003CAFEBABE /* GameScene.swift */; };
 		DEAD000100000014CAFEBABE /* CharacterNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000004CAFEBABE /* CharacterNode.swift */; };
 		DEAD000100000015CAFEBABE /* JoystickNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000005CAFEBABE /* JoystickNode.swift */; };
-		DEAD000100000016CAFEBABE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DEAD000100000006CAFEBABE /* Assets.xcassets */; };
 		DEAD00010000001ACAFEBABE /* CityMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000ACAFEBABE /* CityMap.swift */; };
+		DEAD00010000001BCAFEBABE /* CopNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000BCAFEBABE /* CopNode.swift */; };
+		DEAD00010000001CCAFEBABE /* BulletNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000CCAFEBABE /* BulletNode.swift */; };
+		DEAD000100000016CAFEBABE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DEAD000100000006CAFEBABE /* Assets.xcassets */; };
+		DEAD000100000017CAFEBABE /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = DEAD000100000007CAFEBABE /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,10 +25,13 @@
 		DEAD000100000003CAFEBABE /* GameScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameScene.swift; sourceTree = "<group>"; };
 		DEAD000100000004CAFEBABE /* CharacterNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterNode.swift; sourceTree = "<group>"; };
 		DEAD000100000005CAFEBABE /* JoystickNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoystickNode.swift; sourceTree = "<group>"; };
+		DEAD00010000000ACAFEBABE /* CityMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityMap.swift; sourceTree = "<group>"; };
+		DEAD00010000000BCAFEBABE /* CopNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopNode.swift; sourceTree = "<group>"; };
+		DEAD00010000000CCAFEBABE /* BulletNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulletNode.swift; sourceTree = "<group>"; };
 		DEAD000100000006CAFEBABE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DEAD000100000007CAFEBABE /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		DEAD000100000008CAFEBABE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DEAD000100000009CAFEBABE /* ZombieGame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZombieGame.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		DEAD00010000000ACAFEBABE /* CityMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityMap.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,7 +54,10 @@
 				DEAD000100000004CAFEBABE /* CharacterNode.swift */,
 				DEAD000100000005CAFEBABE /* JoystickNode.swift */,
 				DEAD00010000000ACAFEBABE /* CityMap.swift */,
+				DEAD00010000000BCAFEBABE /* CopNode.swift */,
+				DEAD00010000000CCAFEBABE /* BulletNode.swift */,
 				DEAD000100000006CAFEBABE /* Assets.xcassets */,
+				DEAD000100000007CAFEBABE /* LaunchScreen.storyboard */,
 				DEAD000100000008CAFEBABE /* Info.plist */,
 			);
 			path = ZombieGame;
@@ -129,6 +138,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DEAD000100000016CAFEBABE /* Assets.xcassets in Resources */,
+				DEAD000100000017CAFEBABE /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -145,6 +155,8 @@
 				DEAD000100000014CAFEBABE /* CharacterNode.swift in Sources */,
 				DEAD000100000015CAFEBABE /* JoystickNode.swift in Sources */,
 				DEAD00010000001ACAFEBABE /* CityMap.swift in Sources */,
+				DEAD00010000001BCAFEBABE /* CopNode.swift in Sources */,
+				DEAD00010000001CCAFEBABE /* BulletNode.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -270,7 +282,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = VASSKNJ7GB;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ZombieGame/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -294,7 +305,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = VASSKNJ7GB;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ZombieGame/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;

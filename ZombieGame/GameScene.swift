@@ -1,9 +1,7 @@
 import SpriteKit
 
 extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(max(self, range.lowerBound), range.upperBound)
-    }
+    func clamped(to range: ClosedRange<Self>) -> Self { min(max(self, range.lowerBound), range.upperBound) }
 }
 
 // MARK: - GameScene
@@ -11,28 +9,31 @@ extension Comparable {
 class GameScene: SKScene {
 
     // MARK: - Constants
-    private let worldSize    = CGSize(width: 2016, height: 2016) // 7 × cellW (288)
-    private let biteRadius:   CGFloat = 50
-    private let playerSpeed:  CGFloat = 160
-    private let aiSpeed:      CGFloat = 92   // zombie base speed (further slowed by cars)
-    private let humanSpeed:   CGFloat = 38
-    private let humanCount            = 20
+    private let worldSize   = CGSize(width: 2016, height: 2016)
+    private let biteRadius: CGFloat = 50
+    private let playerSpeed: CGFloat = 160
+    private let aiSpeed:     CGFloat = 92
+    private let humanSpeed:  CGFloat = 38
+    private let humanCount  = 20
+    private let copCount    = 5
 
     // MARK: - State
-    private var cityMap:   CityMap!
-    private var worldNode: SKNode!
+    private var cityMap:    CityMap!
+    private var worldNode:  SKNode!
     private var gameCamera: SKCameraNode!
-    private var joystick:  JoystickNode!
-    private var player:    CharacterNode!
-    private var aiZombies: [CharacterNode] = []
-    private var humans:    [CharacterNode] = []
+    private var joystick:   JoystickNode!
+    private var player:     CharacterNode!
+    private var aiZombies:  [CharacterNode] = []
+    private var humans:     [CharacterNode] = []
+    private var cops:       [CopNode]       = []
+    private var bullets:    [BulletNode]    = []
 
-    // HUD
     private var humanLabel:  SKLabelNode!
     private var zombieLabel: SKLabelNode!
 
-    private var lastTime: TimeInterval = 0
-    private var gameOver = false
+    private var lastTime:  TimeInterval = 0
+    private var gameOver   = false
+    private var playerDead = false
 
     // MARK: - Lifecycle
 
@@ -46,6 +47,7 @@ class GameScene: SKScene {
         setupCamera()
         setupPlayer()
         spawnHumans()
+        spawnCops()
         setupJoystick()
         setupHUD()
     }
@@ -60,30 +62,45 @@ class GameScene: SKScene {
 
     private func setupPlayer() {
         player = CharacterNode(type: .playerZombie)
-        player.position = centerStreetPoint()
+        player.position  = centerStreetPoint()
         player.zPosition = 10
         worldNode.addChild(player)
     }
 
     private func spawnHumans() {
-        var placed = 0
-        var attempts = 0
+        var placed = 0; var attempts = 0
         while placed < humanCount && attempts < 500 {
             attempts += 1
             let pos = cityMap.randomStreetPoint()
             guard dist(pos, player.position) > 250 else { continue }
-            let human = CharacterNode(type: .human)
-            human.position = pos
-            human.zPosition = 10
-            human.wanderTarget = cityMap.randomStreetPoint()
-            worldNode.addChild(human)
-            humans.append(human)
+            let h = CharacterNode(type: .human)
+            h.position     = pos
+            h.zPosition    = 10
+            h.wanderTarget = cityMap.randomStreetPoint()
+            worldNode.addChild(h)
+            humans.append(h)
+            placed += 1
+        }
+    }
+
+    private func spawnCops() {
+        var placed = 0; var attempts = 0
+        while placed < copCount && attempts < 300 {
+            attempts += 1
+            let pos = cityMap.randomStreetPoint()
+            guard dist(pos, player.position) > 300 else { continue }
+            guard !cops.contains(where: { dist($0.position, pos) < 200 }) else { continue }
+            let cop = CopNode()
+            cop.position  = pos
+            cop.zPosition = 10
+            worldNode.addChild(cop)
+            cops.append(cop)
             placed += 1
         }
     }
 
     private func setupJoystick() {
-        joystick = JoystickNode()
+        joystick          = JoystickNode()
         joystick.position = CGPoint(x: -size.width/2 + 110, y: -size.height/2 + 110)
         joystick.zPosition = 100
         gameCamera.addChild(joystick)
@@ -91,10 +108,10 @@ class GameScene: SKScene {
 
     private func setupHUD() {
         let bar = SKShapeNode(rectOf: CGSize(width: size.width, height: 48))
-        bar.fillColor = SKColor(white: 0, alpha: 0.60)
+        bar.fillColor  = SKColor(white: 0, alpha: 0.60)
         bar.strokeColor = .clear
-        bar.position = CGPoint(x: 0, y: size.height/2 - 24)
-        bar.zPosition = 100
+        bar.position   = CGPoint(x: 0, y: size.height/2 - 24)
+        bar.zPosition  = 100
         gameCamera.addChild(bar)
 
         zombieLabel = makeHUDLabel(x: -size.width/4,
@@ -106,18 +123,18 @@ class GameScene: SKScene {
 
     private func makeHUDLabel(x: CGFloat, color: SKColor) -> SKLabelNode {
         let lbl = SKLabelNode(fontNamed: "Menlo-Bold")
-        lbl.fontSize = 20
-        lbl.fontColor = color
+        lbl.fontSize               = 20
+        lbl.fontColor              = color
         lbl.horizontalAlignmentMode = .center
-        lbl.position = CGPoint(x: x, y: size.height/2 - 40)
-        lbl.zPosition = 101
+        lbl.position               = CGPoint(x: x, y: size.height/2 - 40)
+        lbl.zPosition              = 101
         gameCamera.addChild(lbl)
         return lbl
     }
 
     private func refreshHUD() {
         zombieLabel.text = "🧟  \(aiZombies.count + 1)"
-        humanLabel.text  = "🧑  \(humans.count)"
+        humanLabel.text  = "🧑  \(humans.count + cops.count)"
     }
 
     // MARK: - Update loop
@@ -130,10 +147,12 @@ class GameScene: SKScene {
         updatePlayer(dt: dt)
         updateHumans(dt: dt)
         updateAI(dt: dt)
+        updateCops(dt: dt)
+        updateBullets(dt: dt)
         checkBites()
         clampCamera()
 
-        if humans.isEmpty { showWin() }
+        if humans.isEmpty && cops.isEmpty { showWin() }
     }
 
     // MARK: - Movement
@@ -144,22 +163,17 @@ class GameScene: SKScene {
         let speed = playerSpeed * cityMap.speedMultiplier(at: player.position)
         let raw   = CGPoint(x: player.position.x + v.dx * speed * CGFloat(dt),
                             y: player.position.y + v.dy * speed * CGFloat(dt))
-        let clamped = clamp(raw)
-        player.position = cityMap.resolve(newPos: clamped, from: player.position)
+        player.position = cityMap.resolve(newPos: clampToWorld(raw), from: player.position)
         player.faceDirection(v)
     }
 
     private func updateHumans(dt: TimeInterval) {
         for human in humans {
             guard !human.isBeingBitten else { continue }
-
-            // Pick new wander target when close enough
             if let wt = human.wanderTarget, dist(human.position, wt) < 18 {
                 human.wanderTarget = cityMap.randomStreetPoint()
             }
-            if human.wanderTarget == nil {
-                human.wanderTarget = cityMap.randomStreetPoint()
-            }
+            if human.wanderTarget == nil { human.wanderTarget = cityMap.randomStreetPoint() }
             guard let target = human.wanderTarget else { continue }
 
             let dx = target.x - human.position.x
@@ -168,84 +182,284 @@ class GameScene: SKScene {
             guard d > 1 else { continue }
 
             let speed = humanSpeed * cityMap.speedMultiplier(at: human.position)
-            let step  = speed * CGFloat(dt)
-            let raw   = CGPoint(x: human.position.x + (dx/d)*step,
-                                y: human.position.y + (dy/d)*step)
-            human.position = cityMap.resolve(newPos: clamp(raw), from: human.position)
+            let raw   = CGPoint(x: human.position.x + (dx/d) * speed * CGFloat(dt),
+                                y: human.position.y + (dy/d) * speed * CGFloat(dt))
+            human.position = cityMap.resolve(newPos: clampToWorld(raw), from: human.position)
             human.faceDirection(CGVector(dx: dx, dy: dy))
         }
     }
 
     private func updateAI(dt: TimeInterval) {
         for zombie in aiZombies {
-            // Each zombie independently targets its nearest human
-            if zombie.targetHuman == nil
-                || zombie.targetHuman?.parent == nil
-                || zombie.targetHuman?.isBeingBitten == true {
-                zombie.targetHuman = nearestHuman(to: zombie)
+            // Re-target if needed (targets humans AND cops)
+            if zombie.target == nil
+                || zombie.target?.parent == nil
+                || (zombie.target as? CharacterNode)?.isBeingBitten == true
+                || (zombie.target as? CopNode)?.isBeingBitten == true {
+                zombie.target = nearestNonZombie(to: zombie)
             }
-            guard let target = zombie.targetHuman else { continue }
+            guard let target = zombie.target else { continue }
 
             let dx = target.position.x - zombie.position.x
             let dy = target.position.y - zombie.position.y
             let d  = sqrt(dx*dx + dy*dy)
             guard d > 1 else { continue }
 
-            // Zombies take the straight-line (shortest) path; car slowdown still applies
+            // Straight-line path — shortest distance, not necessarily fastest
             let speed = aiSpeed * cityMap.speedMultiplier(at: zombie.position)
-            let step  = speed * CGFloat(dt)
-            let raw   = CGPoint(x: zombie.position.x + (dx/d)*step,
-                                y: zombie.position.y + (dy/d)*step)
-            zombie.position = cityMap.resolve(newPos: clamp(raw), from: zombie.position)
+            let raw   = CGPoint(x: zombie.position.x + (dx/d) * speed * CGFloat(dt),
+                                y: zombie.position.y + (dy/d) * speed * CGFloat(dt))
+            zombie.position = cityMap.resolve(newPos: clampToWorld(raw), from: zombie.position)
             zombie.faceDirection(CGVector(dx: dx, dy: dy))
         }
+    }
+
+    // MARK: - Cops
+
+    private func updateCops(dt: TimeInterval) {
+        for cop in cops {
+            // Find nearest zombie in range
+            let nearestZ = nearestZombieInRange(of: cop)
+            guard let dir = cop.update(dt: dt, toward: nearestZ) else { continue }
+            spawnBullet(direction: dir, from: cop.position)
+        }
+    }
+
+    private func nearestZombieInRange(of cop: CopNode) -> CharacterNode? {
+        let allZombies = [player] + aiZombies
+        return allZombies
+            .filter { dist(cop.position, $0.position) <= CopNode.shootRange }
+            .min { dist(cop.position, $0.position) < dist(cop.position, $1.position) }
+    }
+
+    // MARK: - Bullets
+
+    private func spawnBullet(direction: CGVector, from origin: CGPoint) {
+        let bullet = BulletNode(direction: direction, from: origin)
+        worldNode.addChild(bullet)
+        bullets.append(bullet)
+    }
+
+    private func updateBullets(dt: TimeInterval) {
+        var toRemove: [Int] = []
+        let allZombies = [player] + aiZombies
+
+        for (i, bullet) in bullets.enumerated() {
+            let expired     = bullet.advance(dt: dt)
+            let inBuilding  = cityMap.isInBuilding(bullet.position, radius: 2)
+
+            // Check hits against all zombies
+            var hit = false
+            for zombie in allZombies {
+                guard dist(bullet.position, zombie.position) < 22 else { continue }
+                bullet.spawnImpact()
+                hit = true
+
+                if zombie.takeDamage(BulletNode.damage) {
+                    // Zombie died
+                    if zombie === player {
+                        playerDied()
+                    } else {
+                        zombieDied(zombie)
+                    }
+                }
+                break
+            }
+
+            if hit || expired || inBuilding {
+                if !hit && !inBuilding { /* expired naturally, no spark needed */ }
+                else if inBuilding || expired { /* silent removal */ }
+                bullet.removeFromParent()
+                toRemove.append(i)
+            }
+        }
+        for i in toRemove.reversed() { bullets.remove(at: i) }
     }
 
     // MARK: - Bite logic
 
     private func checkBites() {
-        var toConvert: [CharacterNode] = []
-        for human in humans {
-            guard !human.isBeingBitten else { continue }
-            if dist(player.position, human.position) < biteRadius {
-                toConvert.append(human); continue
+        // Collect targets to bite this frame
+        var humansToConvert: [CharacterNode] = []
+        var copsToConvert:   [CopNode]       = []
+
+        let allZombies = [player] + aiZombies
+
+        for zombie in allZombies {
+            // Human bite
+            for human in humans {
+                guard !human.isBeingBitten else { continue }
+                let isTargeted = (zombie === player) || (zombie.target === human)
+                guard isTargeted, dist(zombie.position, human.position) < biteRadius else { continue }
+                if !humansToConvert.contains(where: { $0 === human }) {
+                    humansToConvert.append(human)
+                }
             }
-            for zombie in aiZombies where zombie.targetHuman === human {
-                if dist(zombie.position, human.position) < biteRadius {
-                    toConvert.append(human); break
+            // Cop bite
+            for cop in cops {
+                guard !cop.isBeingBitten else { continue }
+                let isTargeted = (zombie === player) || (zombie.target === cop)
+                guard isTargeted, dist(zombie.position, cop.position) < biteRadius else { continue }
+                if !copsToConvert.contains(where: { $0 === cop }) {
+                    copsToConvert.append(cop)
                 }
             }
         }
-        toConvert.forEach { startBite($0) }
+
+        humansToConvert.forEach { startBiteHuman($0) }
+        copsToConvert.forEach   { startBiteCop($0) }
     }
 
-    private func startBite(_ human: CharacterNode) {
-        human.isBeingBitten  = true
-        human.wanderTarget   = nil
+    private func startBiteHuman(_ human: CharacterNode) {
+        human.isBeingBitten = true
+        human.wanderTarget  = nil
         human.playBiteAnimation()
         run(.sequence([
             .wait(forDuration: 0.75),
             .run { [weak self, weak human] in
                 guard let self, let human else { return }
-                self.convertToZombie(human)
+                self.convertHumanToZombie(human)
             }
         ]))
     }
 
-    private func convertToZombie(_ human: CharacterNode) {
+    private func startBiteCop(_ cop: CopNode) {
+        cop.isBeingBitten = true
+        cop.playBiteAnimation()
+        run(.sequence([
+            .wait(forDuration: 0.75),
+            .run { [weak self, weak cop] in
+                guard let self, let cop else { return }
+                self.convertCopToZombie(cop)
+            }
+        ]))
+    }
+
+    private func convertHumanToZombie(_ human: CharacterNode) {
         humans.removeAll { $0 === human }
         human.becomeZombie()
         aiZombies.append(human)
-        human.targetHuman = nearestHuman(to: human)
+        human.target = nearestNonZombie(to: human)
         refreshHUD()
+    }
+
+    private func convertCopToZombie(_ cop: CopNode) {
+        cops.removeAll { $0 === cop }
+        cop.removeFromParent()
+
+        let zombie = CharacterNode(type: .aiZombie)
+        zombie.position  = cop.position
+        zombie.zPosition = 10
+        worldNode.addChild(zombie)
+        aiZombies.append(zombie)
+        zombie.target = nearestNonZombie(to: zombie)
+        refreshHUD()
+    }
+
+    // MARK: - Zombie death (shot by police)
+
+    private func zombieDied(_ zombie: CharacterNode) {
+        aiZombies.removeAll { $0 === zombie }
+        // Cancel any pending targets pointing at this zombie
+        for other in aiZombies where other.target === zombie { other.target = nil }
+
+        let pop = SKEmitterNode()   // simple particle burst substitute
+        spawnDeathBurst(at: zombie.position)
+        zombie.removeFromParent()
+        refreshHUD()
+    }
+
+    private func playerDied() {
+        guard !gameOver else { return }
+        gameOver   = true
+        playerDead = true
+        joystick.reset()
+        showGameOver()
+    }
+
+    private func spawnDeathBurst(at pos: CGPoint) {
+        for _ in 0..<8 {
+            let shard = SKShapeNode(circleOfRadius: CGFloat.random(in: 3...7))
+            shard.fillColor   = SKColor(red: CGFloat.random(in: 0.2...0.5),
+                                        green: CGFloat.random(in: 0.5...0.9),
+                                        blue: 0.2, alpha: 0.9)
+            shard.strokeColor = .clear
+            shard.position    = pos
+            shard.zPosition   = 12
+            worldNode.addChild(shard)
+            let angle = CGFloat.random(in: 0 ... .pi*2)
+            let d     = CGFloat.random(in: 15...40)
+            shard.run(.sequence([
+                .group([
+                    .move(to: CGPoint(x: pos.x + cos(angle)*d, y: pos.y + sin(angle)*d),
+                          duration: 0.25),
+                    .fadeOut(withDuration: 0.25)
+                ]),
+                .removeFromParent()
+            ]))
+        }
+    }
+
+    // MARK: - Screens
+
+    private func showWin() {
+        gameOver = true
+        joystick.reset()
+        showEndScreen(title: "INFECTION COMPLETE",
+                      sub: "All \(aiZombies.count + 1) humans turned",
+                      titleColor: .white,
+                      bgColor: SKColor(red: 0, green: 0.22, blue: 0, alpha: 0.88),
+                      borderColor: SKColor(red: 0.25, green: 1, blue: 0.25, alpha: 0.70))
+    }
+
+    private func showGameOver() {
+        showEndScreen(title: "YOU WERE SHOT",
+                      sub: "The police took you down",
+                      titleColor: SKColor(red: 1, green: 0.3, blue: 0.3, alpha: 1),
+                      bgColor: SKColor(red: 0.20, green: 0, blue: 0, alpha: 0.88),
+                      borderColor: SKColor(red: 1, green: 0.25, blue: 0.25, alpha: 0.70))
+    }
+
+    private func showEndScreen(title: String, sub: String,
+                               titleColor: SKColor, bgColor: SKColor, borderColor: SKColor) {
+        let overlay      = SKShapeNode(rectOf: size)
+        overlay.fillColor   = bgColor
+        overlay.strokeColor = borderColor
+        overlay.lineWidth   = 3
+        overlay.zPosition   = 200
+        gameCamera.addChild(overlay)
+
+        let t = centeredLabel(title, font: "Menlo-Bold", size: 34, color: titleColor, y: 55)
+        t.zPosition = 201; gameCamera.addChild(t)
+
+        let s = centeredLabel(sub, font: "Menlo", size: 20,
+                              color: SKColor(white: 0.80, alpha: 1), y: 5)
+        s.zPosition = 201; gameCamera.addChild(s)
+
+        let tap = centeredLabel("tap to play again", font: "Menlo", size: 16,
+                                color: SKColor(white: 0.70, alpha: 1), y: -55)
+        tap.zPosition = 201
+        tap.run(.repeatForever(.sequence([
+            .fadeAlpha(to: 0.25, duration: 0.65),
+            .fadeAlpha(to: 1.00, duration: 0.65)
+        ])))
+        gameCamera.addChild(tap)
     }
 
     // MARK: - Helpers
 
-    private func nearestHuman(to node: SKNode) -> CharacterNode? {
-        humans
-            .filter { !$0.isBeingBitten }
-            .min { dist(node.position, $0.position) < dist(node.position, $1.position) }
+    private func nearestNonZombie(to node: SKNode) -> SKNode? {
+        var best: SKNode? = nil
+        var bestDist = CGFloat.infinity
+        for h in humans where !h.isBeingBitten {
+            let d = dist(node.position, h.position)
+            if d < bestDist { bestDist = d; best = h }
+        }
+        for c in cops where !c.isBeingBitten {
+            let d = dist(node.position, c.position)
+            if d < bestDist { bestDist = d; best = c }
+        }
+        return best
     }
 
     private func clampCamera() {
@@ -254,7 +468,7 @@ class GameScene: SKScene {
         gameCamera.position.y = player.position.y.clamped(to: hh...(worldSize.height - hh))
     }
 
-    private func clamp(_ p: CGPoint) -> CGPoint {
+    private func clampToWorld(_ p: CGPoint) -> CGPoint {
         CGPoint(x: p.x.clamped(to: 10...(worldSize.width  - 10)),
                 y: p.y.clamped(to: 10...(worldSize.height - 10)))
     }
@@ -263,47 +477,12 @@ class GameScene: SKScene {
         sqrt((a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y))
     }
 
-    /// Returns a street-centre point near the world centre to spawn the player.
     private func centerStreetPoint() -> CGPoint {
         let xs = cityMap.streetCenterXs
         let ys = cityMap.streetCenterYs
         let mx = xs.min(by: { abs($0 - worldSize.width/2)  < abs($1 - worldSize.width/2)  })!
         let my = ys.min(by: { abs($0 - worldSize.height/2) < abs($1 - worldSize.height/2) })!
         return CGPoint(x: mx, y: my)
-    }
-
-    // MARK: - Win screen
-
-    private func showWin() {
-        gameOver = true
-        joystick.reset()
-
-        let overlay = SKShapeNode(rectOf: size)
-        overlay.fillColor = SKColor(red: 0, green: 0.22, blue: 0, alpha: 0.88)
-        overlay.strokeColor = SKColor(red: 0.25, green: 1, blue: 0.25, alpha: 0.70)
-        overlay.lineWidth = 3
-        overlay.zPosition = 200
-        gameCamera.addChild(overlay)
-
-        let title = centeredLabel("INFECTION COMPLETE", font: "Menlo-Bold",
-                                  size: 34, color: .white, y: 55)
-        title.zPosition = 201
-        gameCamera.addChild(title)
-
-        let sub = centeredLabel("All \(aiZombies.count + 1) humans turned",
-                                font: "Menlo", size: 20,
-                                color: SKColor(red: 0.55, green: 1, blue: 0.55, alpha: 1), y: 5)
-        sub.zPosition = 201
-        gameCamera.addChild(sub)
-
-        let tap = centeredLabel("tap to play again", font: "Menlo", size: 16,
-                                color: SKColor(white: 0.75, alpha: 1), y: -55)
-        tap.zPosition = 201
-        tap.run(.repeatForever(.sequence([
-            .fadeAlpha(to: 0.25, duration: 0.65),
-            .fadeAlpha(to: 1.00, duration: 0.65)
-        ])))
-        gameCamera.addChild(tap)
     }
 
     private func centeredLabel(_ text: String, font: String, size: CGFloat,
@@ -315,7 +494,7 @@ class GameScene: SKScene {
         return lbl
     }
 
-    // MARK: - Touch handling
+    // MARK: - Touch
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if gameOver { restart(); return }
