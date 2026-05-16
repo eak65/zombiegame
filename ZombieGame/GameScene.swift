@@ -389,14 +389,10 @@ class GameScene: SKScene {
             worldNode.addChild(shard)
             let angle = CGFloat.random(in: 0 ... .pi*2)
             let d     = CGFloat.random(in: 15...40)
-            shard.run(.sequence([
-                .group([
-                    .move(to: CGPoint(x: pos.x + cos(angle)*d, y: pos.y + sin(angle)*d),
-                          duration: 0.25),
-                    .fadeOut(withDuration: 0.25)
-                ]),
-                .removeFromParent()
-            ]))
+            let dest = CGPoint(x: pos.x + cos(angle) * d, y: pos.y + sin(angle) * d)
+            let move = SKAction.move(to: dest, duration: 0.25)
+            let fade = SKAction.fadeOut(withDuration: 0.25)
+            shard.run(SKAction.sequence([SKAction.group([move, fade]), .removeFromParent()]))
         }
     }
 
