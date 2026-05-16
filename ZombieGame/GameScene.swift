@@ -31,9 +31,8 @@ class GameScene: SKScene {
     private var humanLabel:  SKLabelNode!
     private var zombieLabel: SKLabelNode!
 
-    private var lastTime:  TimeInterval = 0
-    private var gameOver   = false
-    private var playerDead = false
+    private var lastTime: TimeInterval = 0
+    private var gameOver  = false
 
     // MARK: - Lifecycle
 
@@ -371,10 +370,42 @@ class GameScene: SKScene {
 
     private func playerDied() {
         guard !gameOver else { return }
-        gameOver   = true
-        playerDead = true
-        joystick.reset()
-        showGameOver()
+
+        // Find nearest AI zombie to possess
+        guard let nearest = aiZombies.min(by: {
+            dist($0.position, player.position) < dist($1.position, player.position)
+        }) else {
+            // No zombies left — true game over
+            gameOver = true
+            joystick.reset()
+            showGameOver()
+            return
+        }
+
+        spawnDeathBurst(at: player.position)
+        player.removeFromParent()
+
+        aiZombies.removeAll { $0 === nearest }
+        nearest.becomePlayer()
+        player = nearest
+        refreshHUD()
+        showSwitchBanner()
+    }
+
+    private func showSwitchBanner() {
+        let title = centeredLabel("ZOMBIE DOWN!", font: "Menlo-Bold", size: 22,
+                                  color: SKColor(red: 1, green: 0.30, blue: 0.30, alpha: 1), y: 20)
+        let sub   = centeredLabel("Possessing nearest zombie…", font: "Menlo", size: 15,
+                                  color: SKColor(white: 0.85, alpha: 1), y: -10)
+        for lbl in [title, sub] {
+            lbl.zPosition = 200
+            lbl.run(.sequence([
+                .wait(forDuration: 1.8),
+                .fadeOut(withDuration: 0.4),
+                .removeFromParent()
+            ]))
+            gameCamera.addChild(lbl)
+        }
     }
 
     private func spawnDeathBurst(at pos: CGPoint) {
@@ -402,7 +433,7 @@ class GameScene: SKScene {
         gameOver = true
         joystick.reset()
         showEndScreen(title: "INFECTION COMPLETE",
-                      sub: "All \(aiZombies.count + 1) humans turned",
+                      sub: "All \(aiZombies.count + 1) zombies on the streets",
                       titleColor: .white,
                       bgColor: SKColor(red: 0, green: 0.22, blue: 0, alpha: 0.88),
                       borderColor: SKColor(red: 0.25, green: 1, blue: 0.25, alpha: 0.70))

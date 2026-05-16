@@ -142,6 +142,16 @@ class CharacterNode: SKNode {
         icon.run(.sequence([.scale(to: 1.3, duration: 0.15), .scale(to: 1.0, duration: 0.15)]))
     }
 
+    func becomePlayer() {
+        kind = .playerZombie
+        addPlayerGlow()
+        if hpFill == nil { buildHealthBar() }
+        run(.sequence([
+            .fadeAlpha(to: 0.2, duration: 0.08), .fadeAlpha(to: 1.0, duration: 0.08),
+            .fadeAlpha(to: 0.2, duration: 0.08), .fadeAlpha(to: 1.0, duration: 0.08)
+        ]))
+    }
+
     func becomeZombie() {
         kind          = .aiZombie
         isBeingBitten = false
