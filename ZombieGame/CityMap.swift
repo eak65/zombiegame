@@ -118,6 +118,13 @@ class CityMap {
         }
     }
 
+    @discardableResult
+    private func tryPlaceCar(_ rect: CGRect, color: SKColor, isHorizontal: Bool) -> Bool {
+        guard !cars.contains(where: { $0.rect.insetBy(dx: -4, dy: -4).intersects(rect) }) else { return false }
+        cars.append(CarData(rect: rect, color: color, isHorizontal: isHorizontal))
+        return true
+    }
+
     private func placeCars() {
         let sw = CityMap.streetW
         let cw = CityMap.cellW
@@ -139,14 +146,12 @@ class CityMap {
             var cx: CGFloat = 30
             while cx + carL < worldSize.width {
                 if Float.random(in: 0...1) < 0.45 {
-                    cars.append(CarData(
-                        rect: CGRect(x: cx, y: sy + edge, width: carL, height: carS),
-                        color: carColors.randomElement()!, isHorizontal: true))
+                    tryPlaceCar(CGRect(x: cx, y: sy + edge, width: carL, height: carS),
+                                color: carColors.randomElement()!, isHorizontal: true)
                 }
                 if Float.random(in: 0...1) < 0.45 {
-                    cars.append(CarData(
-                        rect: CGRect(x: cx, y: sy + sw - edge - carS, width: carL, height: carS),
-                        color: carColors.randomElement()!, isHorizontal: true))
+                    tryPlaceCar(CGRect(x: cx, y: sy + sw - edge - carS, width: carL, height: carS),
+                                color: carColors.randomElement()!, isHorizontal: true)
                 }
                 cx += carL + CGFloat.random(in: 6...22)
             }
@@ -159,14 +164,12 @@ class CityMap {
             var cy: CGFloat = 30
             while cy + carL < worldSize.height {
                 if Float.random(in: 0...1) < 0.45 {
-                    cars.append(CarData(
-                        rect: CGRect(x: sx + edge, y: cy, width: carS, height: carL),
-                        color: carColors.randomElement()!, isHorizontal: false))
+                    tryPlaceCar(CGRect(x: sx + edge, y: cy, width: carS, height: carL),
+                                color: carColors.randomElement()!, isHorizontal: false)
                 }
                 if Float.random(in: 0...1) < 0.45 {
-                    cars.append(CarData(
-                        rect: CGRect(x: sx + sw - edge - carS, y: cy, width: carS, height: carL),
-                        color: carColors.randomElement()!, isHorizontal: false))
+                    tryPlaceCar(CGRect(x: sx + sw - edge - carS, y: cy, width: carS, height: carL),
+                                color: carColors.randomElement()!, isHorizontal: false)
                 }
                 cy += carL + CGFloat.random(in: 6...22)
             }

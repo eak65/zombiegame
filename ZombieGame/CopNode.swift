@@ -112,6 +112,15 @@ class CopNode: SKNode {
         return CGVector(dx: cos(angle), dy: sin(angle))
     }
 
+    // MARK: - Formation
+
+    func lookAt(_ target: CGPoint) {
+        let dx = target.x - position.x
+        guard abs(dx) > 0.05 else { return }
+        xScale         = dx < 0 ? -1 : 1
+        hudNode.xScale = xScale
+    }
+
     // MARK: - Bite (same protocol as humans)
 
     func playBiteAnimation() {

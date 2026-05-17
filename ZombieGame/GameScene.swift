@@ -31,6 +31,8 @@ class GameScene: SKScene {
     private var humanLabel:  SKLabelNode!
     private var zombieLabel: SKLabelNode!
 
+    private var formationThreatDir: CGVector = .zero
+
     private var lastTime: TimeInterval = 0
     private var gameOver  = false
 
@@ -83,6 +85,57 @@ class GameScene: SKScene {
     }
 
     private func spawnCops() {
+        if !buildFormation() { fallbackFormation() }
+    }
+
+    /// Places cops in a line behind parked cars on a horizontal street.
+    /// Returns true when a suitable street was found and all cops placed.
+    private func buildFormation() -> Bool {
+        let worldMid: CGFloat = worldSize.height / 2
+
+        var bestStreetY: CGFloat = -1
+        var bestOuterCars: [CarData] = []
+
+        for streetY in cityMap.streetCenterYs {
+            guard abs(player.position.y - streetY) > 300 else { continue }
+
+            let outerCars: [CarData]
+            if streetY < worldMid {
+                outerCars = cityMap.cars.filter { $0.isHorizontal && $0.rect.midY < streetY }
+            } else {
+                outerCars = cityMap.cars.filter { $0.isHorizontal && $0.rect.midY > streetY }
+            }
+
+            if outerCars.count > bestOuterCars.count {
+                bestOuterCars = outerCars
+                bestStreetY   = streetY
+            }
+        }
+
+        guard bestStreetY >= 0, bestOuterCars.count >= 2 else { return false }
+
+        let sorted = bestOuterCars.sorted { $0.rect.midX < $1.rect.midX }
+        let start  = max(0, (sorted.count - copCount) / 2)
+        let end    = min(sorted.count, start + copCount)
+        let chosen = Array(sorted[start..<end])
+
+        let coverOffset: CGFloat = bestStreetY < worldMid ? 23 : -23
+        formationThreatDir = bestStreetY < worldMid
+            ? CGVector(dx: 0, dy: -1)
+            : CGVector(dx: 0, dy:  1)
+
+        for car in chosen {
+            let cop = CopNode()
+            cop.position  = CGPoint(x: car.rect.midX, y: car.rect.midY + coverOffset)
+            cop.zPosition = 10
+            worldNode.addChild(cop)
+            cops.append(cop)
+        }
+        return true
+    }
+
+    private func fallbackFormation() {
+        formationThreatDir = .zero
         var placed = 0; var attempts = 0
         while placed < copCount && attempts < 300 {
             attempts += 1
@@ -217,10 +270,13 @@ class GameScene: SKScene {
 
     private func updateCops(dt: TimeInterval) {
         for cop in cops {
-            // Find nearest zombie in range
             let nearestZ = nearestZombieInRange(of: cop)
-            guard let dir = cop.update(dt: dt, toward: nearestZ) else { continue }
-            spawnBullet(direction: dir, from: cop.position)
+            if let dir = cop.update(dt: dt, toward: nearestZ) {
+                spawnBullet(direction: dir, from: cop.position)
+            } else if nearestZ == nil && formationThreatDir != .zero {
+                cop.lookAt(CGPoint(x: cop.position.x + formationThreatDir.dx * 100,
+                                   y: cop.position.y + formationThreatDir.dy * 100))
+            }
         }
     }
 
