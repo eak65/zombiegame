@@ -589,7 +589,8 @@ class GameScene: SKScene {
         case .durability:
             upgradeDurability += 1
             CharacterNode.maxHP += 25
-            for z in ([player] + aiZombies) { z.heal(25) }
+            player.heal(25)
+            for z in aiZombies { z.heal(25) }
         case .virulence:
             upgradeVirulence += 1
         case .conversion:
