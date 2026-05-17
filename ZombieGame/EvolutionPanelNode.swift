@@ -184,12 +184,18 @@ class EvolutionPanelNode: SKNode {
     // MARK: - Touch
 
     func handleTouch(at camPt: CGPoint) {
+        // contains() takes a point in the node's *parent* coordinate space.
+        // close is a direct child of self, so camPt (panel space) is already correct.
         if let close = childNode(withName: "evo_close") {
-            if close.contains(close.convert(camPt, from: self)) { onClose?(); return }
+            if close.contains(camPt) { onClose?(); return }
         }
+        // Buy buttons are grandchildren (panel → row → btn), so convert camPt
+        // into each row's local space before calling contains on the button.
         for def in EvolutionPanelNode.defs {
-            if let btn = childNode(withName: "//btn_\(def.type.rawValue)") {
-                if btn.contains(btn.convert(camPt, from: self)) { onBuy?(def.type); return }
+            if let btn = childNode(withName: "//btn_\(def.type.rawValue)"),
+               let row = btn.parent {
+                let rowPt = row.convert(camPt, from: self)
+                if btn.contains(rowPt) { onBuy?(def.type); return }
             }
         }
     }
