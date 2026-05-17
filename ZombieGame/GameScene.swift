@@ -281,7 +281,7 @@ class GameScene: SKScene {
     }
 
     private func nearestZombieInRange(of cop: CopNode) -> CharacterNode? {
-        let allZombies = [player] + aiZombies
+        let allZombies: [CharacterNode] = [player] + aiZombies
         return allZombies
             .filter { dist(cop.position, $0.position) <= CopNode.shootRange }
             .min { dist(cop.position, $0.position) < dist(cop.position, $1.position) }
@@ -297,7 +297,7 @@ class GameScene: SKScene {
 
     private func updateBullets(dt: TimeInterval) {
         var toRemove: [Int] = []
-        let allZombies = [player] + aiZombies
+        let allZombies: [CharacterNode] = [player] + aiZombies
 
         for (i, bullet) in bullets.enumerated() {
             let expired     = bullet.advance(dt: dt)
@@ -338,7 +338,7 @@ class GameScene: SKScene {
         var humansToConvert: [CharacterNode] = []
         var copsToConvert:   [CopNode]       = []
 
-        let allZombies = [player] + aiZombies
+        let allZombies: [CharacterNode] = [player] + aiZombies
 
         for zombie in allZombies {
             // Human bite
