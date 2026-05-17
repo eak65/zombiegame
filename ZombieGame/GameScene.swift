@@ -33,6 +33,20 @@ class GameScene: SKScene {
 
     private var formationThreatDir: CGVector = .zero
 
+    private var upgradeRage       = 0
+    private var upgradeDurability = 0
+    private var upgradeVirulence  = 0
+    private var upgradeConversion = 0
+    private var evolutionPoints   = 0
+
+    private var evolutionPanel: EvolutionPanelNode!
+    private var evoButtonNode:  SKNode!
+    private var evoBadgeLabel:  SKLabelNode!
+
+    private var effectivePlayerSpeed: CGFloat { playerSpeed * (1.0 + 0.20 * CGFloat(upgradeRage)) }
+    private var effectiveAISpeed:     CGFloat { aiSpeed     * (1.0 + 0.20 * CGFloat(upgradeRage)) }
+    private var conversionCeiling:    TimeInterval { [15.0, 10.0, 7.0][min(upgradeConversion, 2)] }
+
     private var lastTime: TimeInterval = 0
     private var gameOver  = false
 
@@ -51,6 +65,7 @@ class GameScene: SKScene {
         spawnCops()
         setupJoystick()
         setupHUD()
+        setupEvolutionUI()
     }
 
     // MARK: - Setup
@@ -212,7 +227,7 @@ class GameScene: SKScene {
     private func updatePlayer(dt: TimeInterval) {
         let v = joystick.velocity
         guard v != .zero else { return }
-        let speed = playerSpeed * cityMap.speedMultiplier(at: player.position)
+        let speed = effectivePlayerSpeed * cityMap.speedMultiplier(at: player.position)
         let raw   = CGPoint(x: player.position.x + v.dx * speed * CGFloat(dt),
                             y: player.position.y + v.dy * speed * CGFloat(dt))
         player.position = cityMap.resolve(newPos: clampToWorld(raw), from: player.position)
@@ -221,7 +236,6 @@ class GameScene: SKScene {
 
     private func updateHumans(dt: TimeInterval) {
         for human in humans {
-            guard !human.isBeingBitten else { continue }
             if let wt = human.wanderTarget, dist(human.position, wt) < 18 {
                 human.wanderTarget = cityMap.randomStreetPoint()
             }
@@ -257,8 +271,7 @@ class GameScene: SKScene {
             let d  = sqrt(dx*dx + dy*dy)
             guard d > 1 else { continue }
 
-            // Straight-line path — shortest distance, not necessarily fastest
-            let speed = aiSpeed * cityMap.speedMultiplier(at: zombie.position)
+            let speed = effectiveAISpeed * cityMap.speedMultiplier(at: zombie.position)
             let raw   = CGPoint(x: zombie.position.x + (dx/d) * speed * CGFloat(dt),
                                 y: zombie.position.y + (dy/d) * speed * CGFloat(dt))
             zombie.position = cityMap.resolve(newPos: clampToWorld(raw), from: zombie.position)
@@ -334,23 +347,20 @@ class GameScene: SKScene {
     // MARK: - Bite logic
 
     private func checkBites() {
-        // Collect targets to bite this frame
-        var humansToConvert: [CharacterNode] = []
-        var copsToConvert:   [CopNode]       = []
+        var humansToConvert: [(CharacterNode, CharacterNode)] = []  // (human, biter)
+        var copsToConvert:   [CopNode] = []
 
         let allZombies: [CharacterNode] = [player] + aiZombies
 
         for zombie in allZombies {
-            // Human bite
             for human in humans {
                 guard !human.isBeingBitten else { continue }
                 let isTargeted = (zombie === player) || (zombie.target === human)
                 guard isTargeted, dist(zombie.position, human.position) < biteRadius else { continue }
-                if !humansToConvert.contains(where: { $0 === human }) {
-                    humansToConvert.append(human)
+                if !humansToConvert.contains(where: { $0.0 === human }) {
+                    humansToConvert.append((human, zombie))
                 }
             }
-            // Cop bite
             for cop in cops {
                 guard !cop.isBeingBitten else { continue }
                 let isTargeted = (zombie === player) || (zombie.target === cop)
@@ -361,18 +371,28 @@ class GameScene: SKScene {
             }
         }
 
-        humansToConvert.forEach { startBiteHuman($0) }
+        humansToConvert.forEach { startBiteHuman($0.0, from: $0.1) }
         copsToConvert.forEach   { startBiteCop($0) }
     }
 
-    private func startBiteHuman(_ human: CharacterNode) {
+    private func startBiteHuman(_ human: CharacterNode, from biter: CharacterNode) {
         human.isBeingBitten = true
-        human.wanderTarget  = nil
-        human.playBiteAnimation()
+
+        // Flee in the opposite direction from the biter
+        let dx  = human.position.x - biter.position.x
+        let dy  = human.position.y - biter.position.y
+        let len = max(sqrt(dx*dx + dy*dy), 1)
+        human.wanderTarget = CGPoint(
+            x: (human.position.x + dx/len * 280).clamped(to: 20...(worldSize.width  - 20)),
+            y: (human.position.y + dy/len * 280).clamped(to: 20...(worldSize.height - 20))
+        )
+        human.startInfectionVisual()
+
+        let delay = TimeInterval.random(in: 3.0...conversionCeiling)
         run(.sequence([
-            .wait(forDuration: 0.75),
+            .wait(forDuration: delay),
             .run { [weak self, weak human] in
-                guard let self, let human else { return }
+                guard let self, let human, human.parent != nil else { return }
                 self.convertHumanToZombie(human)
             }
         ]))
@@ -391,10 +411,12 @@ class GameScene: SKScene {
     }
 
     private func convertHumanToZombie(_ human: CharacterNode) {
+        human.stopInfectionVisual()
         humans.removeAll { $0 === human }
         human.becomeZombie()
         aiZombies.append(human)
         human.target = nearestNonZombie(to: human)
+        awardEvolutionPoint()
         refreshHUD()
     }
 
@@ -408,7 +430,17 @@ class GameScene: SKScene {
         worldNode.addChild(zombie)
         aiZombies.append(zombie)
         zombie.target = nearestNonZombie(to: zombie)
+        awardEvolutionPoint()
         refreshHUD()
+    }
+
+    private func awardEvolutionPoint() {
+        evolutionPoints += 1
+        updateEvoBadge()
+        evoButtonNode.run(.sequence([
+            .scale(to: 1.28, duration: 0.10),
+            .scale(to: 1.00, duration: 0.12)
+        ]))
     }
 
     // MARK: - Zombie death (shot by police)
@@ -481,6 +513,96 @@ class GameScene: SKScene {
             let fade = SKAction.fadeOut(withDuration: 0.25)
             shard.run(SKAction.sequence([SKAction.group([move, fade]), .removeFromParent()]))
         }
+    }
+
+    // MARK: - Evolution UI
+
+    private func setupEvolutionUI() {
+        evolutionPanel           = EvolutionPanelNode(sceneSize: size)
+        evolutionPanel.position  = .zero
+        evolutionPanel.zPosition = 150
+        evolutionPanel.isHidden  = true
+        evolutionPanel.onBuy     = { [weak self] type in self?.buyUpgrade(type) }
+        evolutionPanel.onClose   = { [weak self] in self?.toggleEvolutionPanel() }
+        gameCamera.addChild(evolutionPanel)
+
+        let btnPos = CGPoint(x: size.width/2 - 75, y: -size.height/2 + 75)
+        let circle = SKShapeNode(circleOfRadius: 36)
+        circle.fillColor   = SKColor(red: 0.08, green: 0.22, blue: 0.08, alpha: 0.90)
+        circle.strokeColor = SKColor(red: 0.25, green: 0.80, blue: 0.25, alpha: 0.70)
+        circle.lineWidth   = 2
+        let icon = SKLabelNode(text: "🧬")
+        icon.fontSize = 26
+        icon.verticalAlignmentMode   = .center
+        icon.horizontalAlignmentMode = .center
+        circle.addChild(icon)
+        evoButtonNode          = circle
+        evoButtonNode.position = btnPos
+        evoButtonNode.zPosition = 102
+        gameCamera.addChild(evoButtonNode)
+
+        let badge = SKShapeNode(circleOfRadius: 11)
+        badge.fillColor = SKColor(red: 0.85, green: 0.10, blue: 0.10, alpha: 1)
+        badge.strokeColor = .clear
+        badge.position  = CGPoint(x: 24, y: 24)
+        badge.isHidden  = true
+        badge.name      = "evoBadge"
+        circle.addChild(badge)
+        evoBadgeLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+        evoBadgeLabel.fontSize = 10
+        evoBadgeLabel.fontColor = .white
+        evoBadgeLabel.verticalAlignmentMode   = .center
+        evoBadgeLabel.horizontalAlignmentMode = .center
+        badge.addChild(evoBadgeLabel)
+    }
+
+    private func toggleEvolutionPanel() {
+        evolutionPanel.isHidden.toggle()
+        if !evolutionPanel.isHidden {
+            evolutionPanel.refresh(points: evolutionPoints, levels: upgradeLevels())
+            joystick.reset()
+        }
+    }
+
+    private func upgradeLevels() -> [UpgradeType: Int] {
+        [.rage: upgradeRage, .durability: upgradeDurability,
+         .virulence: upgradeVirulence, .conversion: upgradeConversion]
+    }
+
+    private func buyUpgrade(_ type: UpgradeType) {
+        guard let def = EvolutionPanelNode.defs.first(where: { $0.type == type }) else { return }
+        let currentLevel: Int
+        switch type {
+        case .rage:       currentLevel = upgradeRage
+        case .durability: currentLevel = upgradeDurability
+        case .virulence:  currentLevel = upgradeVirulence
+        case .conversion: currentLevel = upgradeConversion
+        }
+        guard currentLevel < def.costs.count else { return }
+        let cost = def.costs[currentLevel]
+        guard evolutionPoints >= cost else { return }
+
+        evolutionPoints -= cost
+        switch type {
+        case .rage:
+            upgradeRage += 1
+        case .durability:
+            upgradeDurability += 1
+            CharacterNode.maxHP += 25
+            for z in ([player] + aiZombies) { z.heal(25) }
+        case .virulence:
+            upgradeVirulence += 1
+        case .conversion:
+            upgradeConversion += 1
+        }
+        updateEvoBadge()
+        evolutionPanel.refresh(points: evolutionPoints, levels: upgradeLevels())
+    }
+
+    private func updateEvoBadge() {
+        let badge = evoButtonNode.childNode(withName: "evoBadge")
+        badge?.isHidden    = evolutionPoints == 0
+        evoBadgeLabel.text = "\(evolutionPoints)"
     }
 
     // MARK: - Screens
@@ -581,15 +703,27 @@ class GameScene: SKScene {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if gameOver { restart(); return }
-        touches.forEach { joystick.touchBegan($0) }
+        for touch in touches {
+            let camPt = touch.location(in: gameCamera)
+            if !evolutionPanel.isHidden {
+                evolutionPanel.handleTouch(at: camPt)
+            } else if dist(camPt, evoButtonNode.position) < 52 {
+                toggleEvolutionPanel()
+            } else {
+                joystick.touchBegan(touch)
+            }
+        }
     }
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard evolutionPanel.isHidden else { return }
         touches.forEach { joystick.touchMoved($0) }
     }
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard evolutionPanel.isHidden else { return }
         touches.forEach { joystick.touchEnded($0) }
     }
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard evolutionPanel.isHidden else { return }
         touches.forEach { joystick.touchEnded($0) }
     }
 

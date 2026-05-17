@@ -11,7 +11,7 @@ class CharacterNode: SKNode {
 
     // HP — only meaningful for zombies; set when becomeZombie() is called
     private(set) var hp: CGFloat = 100
-    static let maxHP: CGFloat    = 100
+    static var maxHP: CGFloat    = 100
 
     private var icon:        SKLabelNode!
     private var hudNode:     SKNode!      // child that stays unflipped
@@ -140,6 +140,25 @@ class CharacterNode: SKNode {
         ])
         run(.repeat(shake, count: 3))
         icon.run(.sequence([.scale(to: 1.3, duration: 0.15), .scale(to: 1.0, duration: 0.15)]))
+    }
+
+    func heal(_ amount: CGFloat) {
+        guard kind == .playerZombie || kind == .aiZombie else { return }
+        hp = min(hp + amount, CharacterNode.maxHP)
+        refreshHPBar()
+    }
+
+    func startInfectionVisual() {
+        icon.run(.repeatForever(.sequence([
+            .colorize(with: SKColor(red: 0.10, green: 0.85, blue: 0.10, alpha: 1),
+                      colorBlendFactor: 0.65, duration: 0.35),
+            .colorize(withColorBlendFactor: 0, duration: 0.35)
+        ])), withKey: "infected")
+    }
+
+    func stopInfectionVisual() {
+        icon.removeAction(forKey: "infected")
+        icon.run(.colorize(withColorBlendFactor: 0, duration: 0.08))
     }
 
     func becomePlayer() {
