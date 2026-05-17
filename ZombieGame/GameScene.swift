@@ -15,7 +15,7 @@ class GameScene: SKScene {
     private let aiSpeed:     CGFloat = 92
     private let humanSpeed:  CGFloat = 38
     private let humanCount  = 20
-    private let copCount    = 5
+    private let copCount    = 12
 
     // MARK: - State
     private var cityMap:    CityMap!

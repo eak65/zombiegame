@@ -145,11 +145,11 @@ class CityMap {
         while sy < worldSize.height {
             var cx: CGFloat = 30
             while cx + carL < worldSize.width {
-                if Float.random(in: 0...1) < 0.45 {
+                if Float.random(in: 0...1) < 0.20 {
                     tryPlaceCar(CGRect(x: cx, y: sy + edge, width: carL, height: carS),
                                 color: carColors.randomElement()!, isHorizontal: true)
                 }
-                if Float.random(in: 0...1) < 0.45 {
+                if Float.random(in: 0...1) < 0.20 {
                     tryPlaceCar(CGRect(x: cx, y: sy + sw - edge - carS, width: carL, height: carS),
                                 color: carColors.randomElement()!, isHorizontal: true)
                 }
@@ -163,11 +163,11 @@ class CityMap {
         while sx < worldSize.width {
             var cy: CGFloat = 30
             while cy + carL < worldSize.height {
-                if Float.random(in: 0...1) < 0.45 {
+                if Float.random(in: 0...1) < 0.20 {
                     tryPlaceCar(CGRect(x: sx + edge, y: cy, width: carS, height: carL),
                                 color: carColors.randomElement()!, isHorizontal: false)
                 }
-                if Float.random(in: 0...1) < 0.45 {
+                if Float.random(in: 0...1) < 0.20 {
                     tryPlaceCar(CGRect(x: sx + sw - edge - carS, y: cy, width: carS, height: carL),
                                 color: carColors.randomElement()!, isHorizontal: false)
                 }
