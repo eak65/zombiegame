@@ -17,6 +17,7 @@
 		DEAD00010000001BCAFEBABE /* CopNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000BCAFEBABE /* CopNode.swift */; };
 		DEAD00010000001CCAFEBABE /* BulletNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000CCAFEBABE /* BulletNode.swift */; };
 		DEAD00010000001DCAFEBABE /* EvolutionPanelNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000DCAFEBABE /* EvolutionPanelNode.swift */; };
+		DEAD00010000001ECAFEBABE /* SoldierNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000ECAFEBABE /* SoldierNode.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 		DEAD00010000000BCAFEBABE /* CopNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopNode.swift; sourceTree = "<group>"; };
 		DEAD00010000000CCAFEBABE /* BulletNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulletNode.swift; sourceTree = "<group>"; };
 		DEAD00010000000DCAFEBABE /* EvolutionPanelNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EvolutionPanelNode.swift; sourceTree = "<group>"; };
+		DEAD00010000000ECAFEBABE /* SoldierNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoldierNode.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,6 +59,7 @@
 				DEAD00010000000BCAFEBABE /* CopNode.swift */,
 				DEAD00010000000CCAFEBABE /* BulletNode.swift */,
 				DEAD00010000000DCAFEBABE /* EvolutionPanelNode.swift */,
+				DEAD00010000000ECAFEBABE /* SoldierNode.swift */,
 				DEAD000100000006CAFEBABE /* Assets.xcassets */,
 				DEAD000100000008CAFEBABE /* Info.plist */,
 			);
@@ -157,6 +160,7 @@
 				DEAD00010000001BCAFEBABE /* CopNode.swift in Sources */,
 				DEAD00010000001CCAFEBABE /* BulletNode.swift in Sources */,
 				DEAD00010000001DCAFEBABE /* EvolutionPanelNode.swift in Sources */,
+				DEAD00010000001ECAFEBABE /* SoldierNode.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -15,7 +15,8 @@ class GameScene: SKScene {
     private let aiSpeed:     CGFloat = 92
     private let humanSpeed:  CGFloat = 38
     private let humanCount  = 20
-    private let copCount    = 12
+    private let copCount     = 18
+    private let soldierCount = 5
 
     // MARK: - State
     private var cityMap:    CityMap!
@@ -26,6 +27,7 @@ class GameScene: SKScene {
     private var aiZombies:  [CharacterNode] = []
     private var humans:     [CharacterNode] = []
     private var cops:       [CopNode]       = []
+    private var soldiers:   [SoldierNode]   = []
     private var bullets:    [BulletNode]    = []
 
     private var humanLabel:  SKLabelNode!
@@ -63,6 +65,7 @@ class GameScene: SKScene {
         setupPlayer()
         spawnHumans()
         spawnCops()
+        spawnSoldiers()
         setupJoystick()
         setupHUD()
         setupEvolutionUI()
@@ -166,6 +169,23 @@ class GameScene: SKScene {
         }
     }
 
+    private func spawnSoldiers() {
+        var placed = 0; var attempts = 0
+        while placed < soldierCount && attempts < 400 {
+            attempts += 1
+            let pos = cityMap.randomStreetPoint()
+            guard dist(pos, player.position) > 350 else { continue }
+            guard !cops.contains(where: { dist($0.position, pos) < 150 }) else { continue }
+            guard !soldiers.contains(where: { dist($0.position, pos) < 200 }) else { continue }
+            let s = SoldierNode()
+            s.position  = pos
+            s.zPosition = 10
+            worldNode.addChild(s)
+            soldiers.append(s)
+            placed += 1
+        }
+    }
+
     private func setupJoystick() {
         joystick          = JoystickNode()
         joystick.position = CGPoint(x: -size.width/2 + 110, y: -size.height/2 + 110)
@@ -201,7 +221,7 @@ class GameScene: SKScene {
 
     private func refreshHUD() {
         zombieLabel.text = "🧟  \(aiZombies.count + 1)"
-        humanLabel.text  = "🧑  \(humans.count + cops.count)"
+        humanLabel.text  = "🧑  \(humans.count + cops.count + soldiers.count)"
     }
 
     // MARK: - Update loop
@@ -215,11 +235,12 @@ class GameScene: SKScene {
         updateHumans(dt: dt)
         updateAI(dt: dt)
         updateCops(dt: dt)
+        updateSoldiers(dt: dt)
         updateBullets(dt: dt)
         checkBites()
         clampCamera()
 
-        if humans.isEmpty && cops.isEmpty { showWin() }
+        if humans.isEmpty && cops.isEmpty && soldiers.isEmpty { showWin() }
     }
 
     // MARK: - Movement
@@ -261,7 +282,8 @@ class GameScene: SKScene {
             if zombie.target == nil
                 || zombie.target?.parent == nil
                 || (zombie.target as? CharacterNode)?.isBeingBitten == true
-                || (zombie.target as? CopNode)?.isBeingBitten == true {
+                || (zombie.target as? CopNode)?.isBeingBitten == true
+                || (zombie.target as? SoldierNode)?.isBeingBitten == true {
                 zombie.target = nearestNonZombie(to: zombie)
             }
             guard let target = zombie.target else { continue }
@@ -293,11 +315,27 @@ class GameScene: SKScene {
         }
     }
 
+    private func updateSoldiers(dt: TimeInterval) {
+        for soldier in soldiers {
+            let nearestZ = nearestZombieInRange(ofSoldier: soldier)
+            if let dir = soldier.update(dt: dt, toward: nearestZ) {
+                spawnBullet(direction: dir, from: soldier.position)
+            }
+        }
+    }
+
     private func nearestZombieInRange(of cop: CopNode) -> CharacterNode? {
         let allZombies: [CharacterNode] = [player] + aiZombies
         return allZombies
             .filter { dist(cop.position, $0.position) <= CopNode.shootRange }
             .min { dist(cop.position, $0.position) < dist(cop.position, $1.position) }
+    }
+
+    private func nearestZombieInRange(ofSoldier soldier: SoldierNode) -> CharacterNode? {
+        let allZombies: [CharacterNode] = [player] + aiZombies
+        return allZombies
+            .filter { dist(soldier.position, $0.position) <= SoldierNode.shootRange }
+            .min { dist(soldier.position, $0.position) < dist(soldier.position, $1.position) }
     }
 
     // MARK: - Bullets
@@ -347,8 +385,9 @@ class GameScene: SKScene {
     // MARK: - Bite logic
 
     private func checkBites() {
-        var humansToConvert: [(CharacterNode, CharacterNode)] = []  // (human, biter)
-        var copsToConvert:   [CopNode] = []
+        var humansToConvert:   [(CharacterNode, CharacterNode)] = []
+        var copsToConvert:     [CopNode]     = []
+        var soldiersToConvert: [SoldierNode] = []
 
         let allZombies: [CharacterNode] = [player] + aiZombies
 
@@ -365,14 +404,19 @@ class GameScene: SKScene {
                 guard !cop.isBeingBitten else { continue }
                 let isTargeted = (zombie === player) || (zombie.target === cop)
                 guard isTargeted, dist(zombie.position, cop.position) < biteRadius else { continue }
-                if !copsToConvert.contains(where: { $0 === cop }) {
-                    copsToConvert.append(cop)
-                }
+                if !copsToConvert.contains(where: { $0 === cop }) { copsToConvert.append(cop) }
+            }
+            for soldier in soldiers {
+                guard !soldier.isBeingBitten else { continue }
+                let isTargeted = (zombie === player) || (zombie.target === soldier)
+                guard isTargeted, dist(zombie.position, soldier.position) < biteRadius else { continue }
+                if !soldiersToConvert.contains(where: { $0 === soldier }) { soldiersToConvert.append(soldier) }
             }
         }
 
-        humansToConvert.forEach { startBiteHuman($0.0, from: $0.1) }
-        copsToConvert.forEach   { startBiteCop($0) }
+        humansToConvert.forEach   { startBiteHuman($0.0, from: $0.1) }
+        copsToConvert.forEach     { startBiteCop($0) }
+        soldiersToConvert.forEach { startBiteSoldier($0) }
     }
 
     private func startBiteHuman(_ human: CharacterNode, from biter: CharacterNode) {
@@ -426,6 +470,32 @@ class GameScene: SKScene {
 
         let zombie = CharacterNode(type: .aiZombie)
         zombie.position  = cop.position
+        zombie.zPosition = 10
+        worldNode.addChild(zombie)
+        aiZombies.append(zombie)
+        zombie.target = nearestNonZombie(to: zombie)
+        awardEvolutionPoint()
+        refreshHUD()
+    }
+
+    private func startBiteSoldier(_ soldier: SoldierNode) {
+        soldier.isBeingBitten = true
+        soldier.playBiteAnimation()
+        run(.sequence([
+            .wait(forDuration: 0.75),
+            .run { [weak self, weak soldier] in
+                guard let self, let soldier else { return }
+                self.convertSoldierToZombie(soldier)
+            }
+        ]))
+    }
+
+    private func convertSoldierToZombie(_ soldier: SoldierNode) {
+        soldiers.removeAll { $0 === soldier }
+        soldier.removeFromParent()
+
+        let zombie = CharacterNode(type: .aiZombie)
+        zombie.position  = soldier.position
         zombie.zPosition = 10
         worldNode.addChild(zombie)
         aiZombies.append(zombie)
@@ -664,6 +734,10 @@ class GameScene: SKScene {
         for c in cops where !c.isBeingBitten {
             let d = dist(node.position, c.position)
             if d < bestDist { bestDist = d; best = c }
+        }
+        for s in soldiers where !s.isBeingBitten {
+            let d = dist(node.position, s.position)
+            if d < bestDist { bestDist = d; best = s }
         }
         return best
     }
