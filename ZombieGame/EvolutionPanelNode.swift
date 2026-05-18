@@ -2,6 +2,7 @@ import SpriteKit
 
 enum UpgradeType: String, CaseIterable {
     case rage, durability, virulence, conversion
+    case unlockHunter, unlockBrute, unlockScreamer, unlockStalker, unlockSpitter
 }
 
 class EvolutionPanelNode: SKNode {
@@ -15,10 +16,15 @@ class EvolutionPanelNode: SKNode {
     }
 
     static let defs: [Def] = [
-        Def(type: .rage,       name: "INFECTED RAGE",   desc: "+20% zombie speed per tier",      costs: [1, 2, 3], icon: "⚡"),
-        Def(type: .durability, name: "NECROTIC HIDE",   desc: "+25 max HP per tier",             costs: [1, 2, 3], icon: "🛡"),
-        Def(type: .virulence,  name: "VIRAL OVERLOAD",  desc: "40% faster infection per tier",   costs: [2, 4],    icon: "🦠"),
-        Def(type: .conversion, name: "RAPID MUTATION",  desc: "Cut ceiling: 15s → 10s → 7s",    costs: [2, 3],    icon: "🧫"),
+        Def(type: .rage,          name: "INFECTED RAGE",   desc: "+20% zombie speed per tier",    costs: [1, 2, 3], icon: "⚡"),
+        Def(type: .durability,    name: "NECROTIC HIDE",   desc: "+25 max HP per tier",           costs: [1, 2, 3], icon: "🛡"),
+        Def(type: .virulence,     name: "VIRAL OVERLOAD",  desc: "40% faster infection per tier", costs: [2, 4],    icon: "🦠"),
+        Def(type: .conversion,    name: "RAPID MUTATION",  desc: "Cut ceiling: 15s→10s→7s",      costs: [2, 3],    icon: "🧫"),
+        Def(type: .unlockHunter,  name: "HUNTER STRAIN",  desc: "🐺 Fast · tough · wrecks tanks",costs: [4],       icon: "🐺"),
+        Def(type: .unlockBrute,   name: "BRUTE STRAIN",   desc: "👹 Massive HP · slow · wide",   costs: [3],       icon: "👹"),
+        Def(type: .unlockScreamer,name: "SCREAMER STRAIN",desc: "👻 Converts 60% faster",        costs: [3],       icon: "👻"),
+        Def(type: .unlockStalker, name: "STALKER STRAIN", desc: "🦎 Extreme speed · fragile",    costs: [3],       icon: "🦎"),
+        Def(type: .unlockSpitter, name: "SPITTER STRAIN", desc: "🤢 Long range · faster infect", costs: [3],       icon: "🤢"),
     ]
 
     var onBuy:   ((UpgradeType) -> Void)?
@@ -32,7 +38,7 @@ class EvolutionPanelNode: SKNode {
     init(sceneSize: CGSize) {
         W    = min(sceneSize.width * 0.88, 520)
         let maxH = sceneSize.height * 0.91
-        let ideal = CGFloat(EvolutionPanelNode.defs.count) * 96 + 92
+        let ideal = CGFloat(EvolutionPanelNode.defs.count) * 78 + 92
         H    = min(ideal, maxH)
         rowH = (H - 92) / CGFloat(EvolutionPanelNode.defs.count)
         super.init()

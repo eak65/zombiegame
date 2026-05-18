@@ -17,6 +17,7 @@ class GameScene: SKScene {
     private let humanCount  = 20
     private let copCount     = 18
     private let soldierCount = 5
+    private let tankCount    = 2
 
     // MARK: - State
     private var cityMap:    CityMap!
@@ -28,7 +29,13 @@ class GameScene: SKScene {
     private var humans:     [CharacterNode] = []
     private var cops:       [CopNode]       = []
     private var soldiers:   [SoldierNode]   = []
+    private var tanks:      [TankNode]      = []
     private var bullets:    [BulletNode]    = []
+
+    private var unlockedZombieTypes:  Set<ZombieType> = [.standard]
+    private var activeConversionType: ZombieType      = .standard
+    private var strainSelectorNode:   SKNode!
+    private var strainSelectorLabel:  SKLabelNode!
 
     private var humanLabel:  SKLabelNode!
     private var zombieLabel: SKLabelNode!
@@ -69,9 +76,11 @@ class GameScene: SKScene {
         spawnHumans()
         spawnCops()
         spawnSoldiers()
+        spawnTanks(count: tankCount)
         setupJoystick()
         setupHUD()
         setupEvolutionUI()
+        setupStrainSelector()
     }
 
     // MARK: - Setup
@@ -229,7 +238,7 @@ class GameScene: SKScene {
 
     private func refreshHUD() {
         zombieLabel.text = "🧟  \(aiZombies.count + 1)"
-        humanLabel.text  = "🧑  \(humans.count + cops.count + soldiers.count)"
+        humanLabel.text  = "🧑  \(humans.count + cops.count + soldiers.count)  💣 \(tanks.count)"
         levelLabel.text  = "LVL \(currentLevel)"
     }
 
@@ -245,11 +254,12 @@ class GameScene: SKScene {
         updateAI(dt: dt)
         updateCops(dt: dt)
         updateSoldiers(dt: dt)
+        updateTanks(dt: dt)
         updateBullets(dt: dt)
         checkBites()
         clampCamera()
 
-        if humans.isEmpty && cops.isEmpty && soldiers.isEmpty && !levelingUp { advanceLevel() }
+        if humans.isEmpty && cops.isEmpty && soldiers.isEmpty && tanks.isEmpty && !levelingUp { advanceLevel() }
     }
 
     // MARK: - Movement
@@ -323,7 +333,8 @@ class GameScene: SKScene {
             guard d > 1 else { continue }
 
             let prevPos = zombie.position
-            let speed = effectiveAISpeed * cityMap.speedMultiplier(at: zombie.position)
+            let typeMult = ZombieTypeData.info(for: zombie.zombieType).speedMult
+            let speed = effectiveAISpeed * typeMult * cityMap.speedMultiplier(at: zombie.position)
             let raw   = CGPoint(x: zombie.position.x + (dx/d) * speed * CGFloat(dt),
                                 y: zombie.position.y + (dy/d) * speed * CGFloat(dt))
             zombie.position = cityMap.resolve(newPos: clampToWorld(raw), from: zombie.position)
@@ -450,10 +461,11 @@ class GameScene: SKScene {
         let allZombies: [CharacterNode] = [player] + aiZombies
 
         for zombie in allZombies {
+            let br = biteRadius + ZombieTypeData.info(for: zombie.zombieType).biteRadiusBonus
             for human in humans {
                 guard !human.isBeingBitten else { continue }
                 let isTargeted = (zombie === player) || (zombie.target === human)
-                guard isTargeted, dist(zombie.position, human.position) < biteRadius else { continue }
+                guard isTargeted, dist(zombie.position, human.position) < br else { continue }
                 if !humansToConvert.contains(where: { $0.0 === human }) {
                     humansToConvert.append((human, zombie))
                 }
@@ -461,13 +473,13 @@ class GameScene: SKScene {
             for cop in cops {
                 guard !cop.isBeingBitten else { continue }
                 let isTargeted = (zombie === player) || (zombie.target === cop)
-                guard isTargeted, dist(zombie.position, cop.position) < biteRadius else { continue }
+                guard isTargeted, dist(zombie.position, cop.position) < br else { continue }
                 if !copsToConvert.contains(where: { $0 === cop }) { copsToConvert.append(cop) }
             }
             for soldier in soldiers {
                 guard !soldier.isBeingBitten else { continue }
                 let isTargeted = (zombie === player) || (zombie.target === soldier)
-                guard isTargeted, dist(zombie.position, soldier.position) < biteRadius else { continue }
+                guard isTargeted, dist(zombie.position, soldier.position) < br else { continue }
                 if !soldiersToConvert.contains(where: { $0 === soldier }) { soldiersToConvert.append(soldier) }
             }
         }
@@ -478,9 +490,9 @@ class GameScene: SKScene {
     }
 
     private func startBiteHuman(_ human: CharacterNode, from biter: CharacterNode) {
-        human.isBeingBitten = true
+        human.isBeingBitten    = true
+        human.pendingZombieType = (biter === player) ? activeConversionType : .standard
 
-        // Flee in the opposite direction from the biter
         let dx  = human.position.x - biter.position.x
         let dy  = human.position.y - biter.position.y
         let len = max(sqrt(dx*dx + dy*dy), 1)
@@ -490,7 +502,10 @@ class GameScene: SKScene {
         )
         human.startInfectionVisual()
 
-        let delay = TimeInterval.random(in: 3.0...conversionCeiling)
+        let infMult = ZombieTypeData.info(for: human.pendingZombieType).infectionMult
+        let floor   = max(0.5, 3.0 * infMult)
+        let ceiling = max(floor + 0.1, conversionCeiling * infMult)
+        let delay   = TimeInterval.random(in: floor...ceiling)
         run(.sequence([
             .wait(forDuration: delay),
             .run { [weak self, weak human] in
@@ -515,7 +530,7 @@ class GameScene: SKScene {
     private func convertHumanToZombie(_ human: CharacterNode) {
         human.stopInfectionVisual()
         humans.removeAll { $0 === human }
-        human.becomeZombie()
+        human.becomeZombie(type: human.pendingZombieType)
         aiZombies.append(human)
         human.target = nearestNonZombie(to: human)
         awardEvolutionPoint()
@@ -694,17 +709,27 @@ class GameScene: SKScene {
 
     private func upgradeLevels() -> [UpgradeType: Int] {
         [.rage: upgradeRage, .durability: upgradeDurability,
-         .virulence: upgradeVirulence, .conversion: upgradeConversion]
+         .virulence: upgradeVirulence, .conversion: upgradeConversion,
+         .unlockHunter:   unlockedZombieTypes.contains(.hunter)   ? 1 : 0,
+         .unlockBrute:    unlockedZombieTypes.contains(.brute)    ? 1 : 0,
+         .unlockScreamer: unlockedZombieTypes.contains(.screamer) ? 1 : 0,
+         .unlockStalker:  unlockedZombieTypes.contains(.stalker)  ? 1 : 0,
+         .unlockSpitter:  unlockedZombieTypes.contains(.spitter)  ? 1 : 0]
     }
 
     private func buyUpgrade(_ type: UpgradeType) {
         guard let def = EvolutionPanelNode.defs.first(where: { $0.type == type }) else { return }
         let currentLevel: Int
         switch type {
-        case .rage:       currentLevel = upgradeRage
-        case .durability: currentLevel = upgradeDurability
-        case .virulence:  currentLevel = upgradeVirulence
-        case .conversion: currentLevel = upgradeConversion
+        case .rage:           currentLevel = upgradeRage
+        case .durability:     currentLevel = upgradeDurability
+        case .virulence:      currentLevel = upgradeVirulence
+        case .conversion:     currentLevel = upgradeConversion
+        case .unlockHunter:   currentLevel = unlockedZombieTypes.contains(.hunter)   ? 1 : 0
+        case .unlockBrute:    currentLevel = unlockedZombieTypes.contains(.brute)    ? 1 : 0
+        case .unlockScreamer: currentLevel = unlockedZombieTypes.contains(.screamer) ? 1 : 0
+        case .unlockStalker:  currentLevel = unlockedZombieTypes.contains(.stalker)  ? 1 : 0
+        case .unlockSpitter:  currentLevel = unlockedZombieTypes.contains(.spitter)  ? 1 : 0
         }
         guard currentLevel < def.costs.count else { return }
         let cost = def.costs[currentLevel]
@@ -717,12 +742,28 @@ class GameScene: SKScene {
         case .durability:
             upgradeDurability += 1
             CharacterNode.maxHP += 25
-            player.heal(25)
-            for z in aiZombies { z.heal(25) }
+            // Recompute each zombie's instanceMaxHP so HP scales with their type
+            let allZ: [CharacterNode] = [player] + aiZombies
+            for z in allZ {
+                let newMax = CharacterNode.maxHP * ZombieTypeData.info(for: z.zombieType).hpMult
+                let bonus  = newMax - z.instanceMaxHP
+                z.setInstanceMaxHP(newMax)
+                z.heal(bonus)
+            }
         case .virulence:
             upgradeVirulence += 1
         case .conversion:
             upgradeConversion += 1
+        case .unlockHunter:
+            unlockedZombieTypes.insert(.hunter);   updateStrainSelector()
+        case .unlockBrute:
+            unlockedZombieTypes.insert(.brute);    updateStrainSelector()
+        case .unlockScreamer:
+            unlockedZombieTypes.insert(.screamer); updateStrainSelector()
+        case .unlockStalker:
+            unlockedZombieTypes.insert(.stalker);  updateStrainSelector()
+        case .unlockSpitter:
+            unlockedZombieTypes.insert(.spitter);  updateStrainSelector()
         }
         updateEvoBadge()
         evolutionPanel.refresh(points: evolutionPoints, levels: upgradeLevels())
@@ -743,16 +784,17 @@ class GameScene: SKScene {
 
         let nextCops     = copCount     + (currentLevel - 1) * 6
         let nextSoldiers = soldierCount + (currentLevel - 1) * 2
+        let nextTanks    = tankCount    + (currentLevel - 1)
 
-        showLevelBanner(level: currentLevel, cops: nextCops, soldiers: nextSoldiers) { [weak self] in
+        showLevelBanner(level: currentLevel, cops: nextCops, soldiers: nextSoldiers, tanks: nextTanks) { [weak self] in
             guard let self else { return }
-            self.spawnLevelForces(cops: nextCops, soldiers: nextSoldiers)
+            self.spawnLevelForces(cops: nextCops, soldiers: nextSoldiers, tanks: nextTanks)
             self.levelingUp = false
         }
     }
 
-    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, completion: @escaping () -> Void) {
-        let overlay = SKShapeNode(rectOf: CGSize(width: size.width * 0.78, height: 160), cornerRadius: 16)
+    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, tanks: Int, completion: @escaping () -> Void) {
+        let overlay = SKShapeNode(rectOf: CGSize(width: size.width * 0.78, height: 170), cornerRadius: 16)
         overlay.fillColor   = SKColor(red: 0.04, green: 0.10, blue: 0.04, alpha: 0.94)
         overlay.strokeColor = SKColor(red: 0.25, green: 1.00, blue: 0.25, alpha: 0.70)
         overlay.lineWidth   = 2.5
@@ -760,15 +802,15 @@ class GameScene: SKScene {
         gameCamera.addChild(overlay)
 
         let title = centeredLabel("LEVEL \(level)", font: "Menlo-Bold", size: 36,
-                                  color: SKColor(red: 0.30, green: 1.00, blue: 0.30, alpha: 1), y: 38)
+                                  color: SKColor(red: 0.30, green: 1.00, blue: 0.30, alpha: 1), y: 46)
         title.zPosition = 201; gameCamera.addChild(title)
 
         let sub = centeredLabel("Reinforcements incoming…", font: "Menlo", size: 16,
-                                color: SKColor(white: 0.80, alpha: 1), y: 4)
+                                color: SKColor(white: 0.80, alpha: 1), y: 10)
         sub.zPosition = 201; gameCamera.addChild(sub)
 
-        let detail = centeredLabel("👮 \(cops)   🪖 \(soldiers)", font: "Menlo-Bold", size: 18,
-                                   color: SKColor(red: 1.00, green: 0.80, blue: 0.30, alpha: 1), y: -30)
+        let detail = centeredLabel("👮 \(cops)  🪖 \(soldiers)  💣 \(tanks)", font: "Menlo-Bold", size: 16,
+                                   color: SKColor(red: 1.00, green: 0.80, blue: 0.30, alpha: 1), y: -20)
         detail.zPosition = 201; gameCamera.addChild(detail)
 
         let nodes = [overlay, title, sub, detail]
@@ -803,7 +845,7 @@ class GameScene: SKScene {
         }
     }
 
-    private func spawnLevelForces(cops copsToSpawn: Int, soldiers soldiersToSpawn: Int) {
+    private func spawnLevelForces(cops copsToSpawn: Int, soldiers soldiersToSpawn: Int, tanks tanksToSpawn: Int) {
         // Regroup all zombies at the bottom-left street corner
         regroupZombies()
 
@@ -843,6 +885,7 @@ class GameScene: SKScene {
             placed += 1
         }
 
+        spawnTanks(count: tanksToSpawn)
         refreshHUD()
     }
 
@@ -899,7 +942,181 @@ class GameScene: SKScene {
             let d = dist(node.position, s.position)
             if d < bestDist { bestDist = d; best = s }
         }
+        for t in tanks {  // always targetable — multiple zombies can swarm
+            let d = dist(node.position, t.position)
+            if d < bestDist { bestDist = d; best = t }
+        }
         return best
+    }
+
+    // MARK: - Tanks
+
+    private func spawnTanks(count: Int) {
+        var placed = 0; var attempts = 0
+        while placed < count && attempts < 400 {
+            attempts += 1
+            let pos = cityMap.randomStreetPoint()
+            guard dist(pos, player.position) > 400 else { continue }
+            guard !tanks.contains(where: { dist($0.position, pos) < 260 }) else { continue }
+            let tank = TankNode()
+            tank.position  = pos
+            tank.zPosition = 10
+            worldNode.addChild(tank)
+            tanks.append(tank)
+            placed += 1
+        }
+    }
+
+    private func updateTanks(dt: TimeInterval) {
+        var toDestroy: [TankNode] = []
+        let allZombies: [CharacterNode] = [player] + aiZombies
+
+        for tank in tanks {
+            // Swarm damage: every zombie within swarmRadius deals tankDmgPerSec
+            let swarming = allZombies.filter { dist($0.position, tank.position) < TankNode.swarmRadius }
+            if !swarming.isEmpty {
+                let totalDmg = CGFloat(dt) * swarming.reduce(0) {
+                    $0 + ZombieTypeData.info(for: $1.zombieType).tankDmgPerSec
+                }
+                if tank.takeDamage(totalDmg) {
+                    toDestroy.append(tank); continue
+                }
+            }
+
+            // Cannon fire with line-of-sight check
+            let nearestZ = nearestZombieInRange(ofTank: tank)
+            let visibleZ = nearestZ.flatMap { z in
+                cityMap.hasLineOfSight(from: tank.position, to: z.position) ? z : nil
+            }
+            if let blastTarget = tank.update(dt: dt, toward: visibleZ) {
+                let target = blastTarget
+                run(.sequence([
+                    .wait(forDuration: 0.35),
+                    .run { [weak self] in self?.spawnBlast(at: target) }
+                ]))
+            }
+        }
+        for tank in toDestroy { tankDestroyed(tank) }
+    }
+
+    private func nearestZombieInRange(ofTank tank: TankNode) -> CharacterNode? {
+        let allZombies: [CharacterNode] = [player] + aiZombies
+        return allZombies
+            .filter { dist(tank.position, $0.position) <= TankNode.shootRange }
+            .min { dist(tank.position, $0.position) < dist(tank.position, $1.position) }
+    }
+
+    private func tankDestroyed(_ tank: TankNode) {
+        tanks.removeAll { $0 === tank }
+        for z in aiZombies where z.target === tank { z.target = nil }
+        if player.target === tank { player.target = nil }
+        spawnTankExplosion(at: tank.position)
+        tank.removeFromParent()
+        refreshHUD()
+    }
+
+    private func spawnBlast(at center: CGPoint) {
+        let blast = SKShapeNode(circleOfRadius: TankNode.blastRadius)
+        blast.fillColor   = SKColor(red: 1.0, green: 0.55, blue: 0.0, alpha: 0.75)
+        blast.strokeColor = SKColor(red: 1.0, green: 0.85, blue: 0.0, alpha: 0.90)
+        blast.lineWidth   = 3
+        blast.position    = center
+        blast.zPosition   = 15
+        worldNode.addChild(blast)
+        blast.run(.sequence([
+            .group([.scale(to: 1.5, duration: 0.15), .fadeAlpha(to: 0, duration: 0.30)]),
+            .removeFromParent()
+        ]))
+
+        let core = SKShapeNode(circleOfRadius: TankNode.blastRadius * 0.45)
+        core.fillColor   = SKColor(red: 1.0, green: 1.0, blue: 0.85, alpha: 1.0)
+        core.strokeColor = .clear
+        core.position    = center
+        core.zPosition   = 16
+        worldNode.addChild(core)
+        core.run(.sequence([.fadeOut(withDuration: 0.14), .removeFromParent()]))
+
+        // Damage all zombies in blast radius
+        let allZombies: [CharacterNode] = [player] + aiZombies
+        for zombie in allZombies {
+            guard dist(zombie.position, center) < TankNode.blastRadius else { continue }
+            if zombie.takeDamage(TankNode.blastDamage) {
+                if zombie === player { playerDied() } else { zombieDied(zombie) }
+            }
+        }
+    }
+
+    private func spawnTankExplosion(at pos: CGPoint) {
+        for _ in 0..<14 {
+            let shard = SKShapeNode(circleOfRadius: CGFloat.random(in: 4...11))
+            shard.fillColor   = SKColor(red: CGFloat.random(in: 0.7...1.0),
+                                        green: CGFloat.random(in: 0.3...0.7),
+                                        blue: 0.0, alpha: 1.0)
+            shard.strokeColor = .clear
+            shard.position    = pos
+            shard.zPosition   = 15
+            worldNode.addChild(shard)
+            let angle = CGFloat.random(in: 0 ... .pi * 2)
+            let d     = CGFloat.random(in: 30...80)
+            let dest  = CGPoint(x: pos.x + cos(angle) * d, y: pos.y + sin(angle) * d)
+            shard.run(.sequence([
+                .group([.move(to: dest, duration: 0.38), .fadeOut(withDuration: 0.38)]),
+                .removeFromParent()
+            ]))
+        }
+        let ring = SKShapeNode(circleOfRadius: 12)
+        ring.fillColor   = .clear
+        ring.strokeColor = SKColor(red: 1.0, green: 0.70, blue: 0.0, alpha: 1.0)
+        ring.lineWidth   = 7
+        ring.position    = pos
+        ring.zPosition   = 16
+        worldNode.addChild(ring)
+        ring.run(.sequence([
+            .group([.scale(to: 9, duration: 0.42), .fadeOut(withDuration: 0.42)]),
+            .removeFromParent()
+        ]))
+    }
+
+    // MARK: - Strain selector
+
+    private func setupStrainSelector() {
+        let bg = SKShapeNode(rectOf: CGSize(width: 140, height: 34), cornerRadius: 10)
+        bg.fillColor   = SKColor(red: 0.05, green: 0.10, blue: 0.05, alpha: 0.88)
+        bg.strokeColor = SKColor(red: 0.20, green: 0.70, blue: 0.20, alpha: 0.65)
+        bg.lineWidth   = 1.5
+        bg.name        = "strainBtn"
+
+        let lbl = SKLabelNode(fontNamed: "Menlo-Bold")
+        lbl.fontSize                = 11
+        lbl.fontColor               = SKColor(red: 0.30, green: 1.00, blue: 0.30, alpha: 1)
+        lbl.verticalAlignmentMode   = .center
+        lbl.horizontalAlignmentMode = .center
+        lbl.name                    = "strainLbl"
+        bg.addChild(lbl)
+        strainSelectorLabel = lbl
+
+        strainSelectorNode          = bg
+        strainSelectorNode.position = CGPoint(x: 0, y: -size.height/2 + 38)
+        strainSelectorNode.zPosition = 102
+        gameCamera.addChild(strainSelectorNode)
+        updateStrainSelector()
+    }
+
+    private func updateStrainSelector() {
+        let info = ZombieTypeData.info(for: activeConversionType)
+        strainSelectorLabel.text = "\(info.emoji) \(info.name)"
+        strainSelectorNode.run(.sequence([
+            .scale(to: 1.12, duration: 0.08),
+            .scale(to: 1.00, duration: 0.10)
+        ]))
+    }
+
+    private func cycleConversionType() {
+        let available = ZombieType.allCases.filter { unlockedZombieTypes.contains($0) }
+        guard available.count > 1 else { return }
+        let idx = available.firstIndex(of: activeConversionType) ?? 0
+        activeConversionType = available[(idx + 1) % available.count]
+        updateStrainSelector()
     }
 
     private func clampCamera() {
@@ -944,6 +1161,8 @@ class GameScene: SKScene {
                 evolutionPanel.handleTouch(at: camPt)
             } else if dist(camPt, evoButtonNode.position) < 52 {
                 toggleEvolutionPanel()
+            } else if dist(camPt, strainSelectorNode.position) < 72 {
+                cycleConversionType()
             } else {
                 joystick.touchBegan(touch)
             }

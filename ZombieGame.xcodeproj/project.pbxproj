@@ -18,6 +18,8 @@
 		DEAD00010000001CCAFEBABE /* BulletNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000CCAFEBABE /* BulletNode.swift */; };
 		DEAD00010000001DCAFEBABE /* EvolutionPanelNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000DCAFEBABE /* EvolutionPanelNode.swift */; };
 		DEAD00010000001ECAFEBABE /* SoldierNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000ECAFEBABE /* SoldierNode.swift */; };
+		DEAD00010000001FCAFEBABE /* ZombieTypeData.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000FCAFEBABE /* ZombieTypeData.swift */; };
+		DEAD000100000020CAFEBABE /* TankNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000010CAFEBABE /* TankNode.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +36,8 @@
 		DEAD00010000000CCAFEBABE /* BulletNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulletNode.swift; sourceTree = "<group>"; };
 		DEAD00010000000DCAFEBABE /* EvolutionPanelNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EvolutionPanelNode.swift; sourceTree = "<group>"; };
 		DEAD00010000000ECAFEBABE /* SoldierNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoldierNode.swift; sourceTree = "<group>"; };
+		DEAD00010000000FCAFEBABE /* ZombieTypeData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZombieTypeData.swift; sourceTree = "<group>"; };
+		DEAD000100000010CAFEBABE /* TankNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TankNode.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +64,8 @@
 				DEAD00010000000CCAFEBABE /* BulletNode.swift */,
 				DEAD00010000000DCAFEBABE /* EvolutionPanelNode.swift */,
 				DEAD00010000000ECAFEBABE /* SoldierNode.swift */,
+				DEAD00010000000FCAFEBABE /* ZombieTypeData.swift */,
+				DEAD000100000010CAFEBABE /* TankNode.swift */,
 				DEAD000100000006CAFEBABE /* Assets.xcassets */,
 				DEAD000100000008CAFEBABE /* Info.plist */,
 			);
@@ -161,6 +167,8 @@
 				DEAD00010000001CCAFEBABE /* BulletNode.swift in Sources */,
 				DEAD00010000001DCAFEBABE /* EvolutionPanelNode.swift in Sources */,
 				DEAD00010000001ECAFEBABE /* SoldierNode.swift in Sources */,
+				DEAD00010000001FCAFEBABE /* ZombieTypeData.swift in Sources */,
+				DEAD000100000020CAFEBABE /* TankNode.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

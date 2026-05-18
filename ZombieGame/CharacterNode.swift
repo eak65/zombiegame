@@ -6,16 +6,21 @@ class CharacterNode: SKNode {
 
     private(set) var kind: Kind
     var isBeingBitten = false
-    var target:       SKNode?    // AI zombies — CharacterNode (human) or CopNode
-    var wanderTarget: CGPoint?   // humans
+    var target:        SKNode?    // AI zombies — CharacterNode (human) or CopNode / TankNode
+    var wanderTarget:  CGPoint?   // humans
 
     // Stuck-detection / escape
     var stuckTimer:    TimeInterval = 0
     var stuckWaypoint: CGPoint?     = nil
 
-    // HP — only meaningful for zombies; set when becomeZombie() is called
-    private(set) var hp: CGFloat = 100
-    static var maxHP: CGFloat    = 100
+    // Zombie strain
+    var zombieType:        ZombieType = .standard
+    var pendingZombieType: ZombieType = .standard  // set in startBiteHuman before conversion
+
+    // HP — per-instance max accounts for zombie type HP multiplier
+    private(set) var hp:          CGFloat = 100
+    private(set) var instanceMaxHP: CGFloat = 100
+    static var maxHP: CGFloat = 100  // base HP; increased by durability upgrade
 
     private var icon:        SKLabelNode!
     private var hudNode:     SKNode!      // child that stays unflipped
@@ -59,10 +64,14 @@ class CharacterNode: SKNode {
     private func applyAppearance() {
         switch kind {
         case .playerZombie:
+            instanceMaxHP = CharacterNode.maxHP
+            hp            = instanceMaxHP
             icon.text = "🧟"
             addPlayerGlow()
             buildHealthBar()
         case .aiZombie:
+            instanceMaxHP = CharacterNode.maxHP
+            hp            = instanceMaxHP
             icon.text = "🧟"
             buildHealthBar()
         case .human:
@@ -120,7 +129,7 @@ class CharacterNode: SKNode {
 
     private func refreshHPBar() {
         guard let fill = hpFill else { return }
-        let pct = hp / CharacterNode.maxHP
+        let pct = hp / max(1, instanceMaxHP)
         fill.xScale    = pct
         fill.position.x = -(hpBarWidth / 2) * (1 - pct)
         switch pct {
@@ -148,8 +157,12 @@ class CharacterNode: SKNode {
 
     func heal(_ amount: CGFloat) {
         guard kind == .playerZombie || kind == .aiZombie else { return }
-        hp = min(hp + amount, CharacterNode.maxHP)
+        hp = min(hp + amount, instanceMaxHP)
         refreshHPBar()
+    }
+
+    func setInstanceMaxHP(_ newMax: CGFloat) {
+        instanceMaxHP = newMax
     }
 
     func startInfectionVisual() {
@@ -167,6 +180,7 @@ class CharacterNode: SKNode {
 
     func becomePlayer() {
         kind = .playerZombie
+        instanceMaxHP = CharacterNode.maxHP * ZombieTypeData.info(for: zombieType).hpMult
         addPlayerGlow()
         if hpFill == nil { buildHealthBar() }
         run(.sequence([
@@ -175,15 +189,16 @@ class CharacterNode: SKNode {
         ]))
     }
 
-    func becomeZombie() {
+    func becomeZombie(type: ZombieType = .standard) {
+        zombieType    = type
         kind          = .aiZombie
         isBeingBitten = false
         wanderTarget  = nil
-        hp            = CharacterNode.maxHP
+        instanceMaxHP = CharacterNode.maxHP * ZombieTypeData.info(for: type).hpMult
+        hp            = instanceMaxHP
         icon.removeAction(forKey: "breathe")
-        icon.text = "🧟"
+        icon.text = ZombieTypeData.info(for: type).emoji
 
-        // Build health bar if not already present (converting from human)
         if hpFill == nil { buildHealthBar() }
         refreshHPBar()
 
