@@ -354,6 +354,22 @@ class CityMap {
         buildings.contains { $0.rect.insetBy(dx: -radius, dy: -radius).contains(point) }
     }
 
+    /// True if the straight line from `a` to `b` passes through no building.
+    func hasLineOfSight(from a: CGPoint, to b: CGPoint) -> Bool {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let len = sqrt(dx*dx + dy*dy)
+        guard len > 0 else { return true }
+        // Sample every 18 pts; skip first and last samples (shooter/target positions)
+        let steps = max(2, Int(len / 18))
+        for i in 1..<steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let pt = CGPoint(x: a.x + dx * t, y: a.y + dy * t)
+            if buildings.contains(where: { $0.rect.contains(pt) }) { return false }
+        }
+        return true
+    }
+
     /// Random point guaranteed to be on the street grid.
     func randomStreetPoint() -> CGPoint {
         CGPoint(x: streetCenterXs.randomElement()!,

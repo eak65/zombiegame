@@ -32,6 +32,7 @@ class GameScene: SKScene {
 
     private var humanLabel:  SKLabelNode!
     private var zombieLabel: SKLabelNode!
+    private var levelLabel:  SKLabelNode!
 
     private var formationThreatDir: CGVector = .zero
 
@@ -49,8 +50,10 @@ class GameScene: SKScene {
     private var effectiveAISpeed:     CGFloat { aiSpeed     * (1.0 + 0.20 * CGFloat(upgradeRage)) }
     private var conversionCeiling:    TimeInterval { [15.0, 10.0, 7.0][min(upgradeConversion, 2)] }
 
-    private var lastTime: TimeInterval = 0
-    private var gameOver  = false
+    private var lastTime:     TimeInterval = 0
+    private var gameOver      = false
+    private var currentLevel  = 1
+    private var levelingUp    = false
 
     // MARK: - Lifecycle
 
@@ -103,12 +106,13 @@ class GameScene: SKScene {
     }
 
     private func spawnCops() {
-        if !buildFormation() { fallbackFormation() }
+        if !buildFormationWithCount(copCount) { fallbackFormationWithCount(copCount) }
     }
 
     /// Places cops in a line behind parked cars on a horizontal street.
-    /// Returns true when a suitable street was found and all cops placed.
-    private func buildFormation() -> Bool {
+    /// Returns true when a suitable street was found and cops placed.
+    @discardableResult
+    private func buildFormationWithCount(_ count: Int) -> Bool {
         let worldMid: CGFloat = worldSize.height / 2
 
         var bestStreetY: CGFloat = -1
@@ -133,8 +137,8 @@ class GameScene: SKScene {
         guard bestStreetY >= 0, bestOuterCars.count >= 2 else { return false }
 
         let sorted = bestOuterCars.sorted { $0.rect.midX < $1.rect.midX }
-        let start  = max(0, (sorted.count - copCount) / 2)
-        let end    = min(sorted.count, start + copCount)
+        let start  = max(0, (sorted.count - count) / 2)
+        let end    = min(sorted.count, start + count)
         let chosen = Array(sorted[start..<end])
 
         let coverOffset: CGFloat = bestStreetY < worldMid ? 23 : -23
@@ -149,17 +153,20 @@ class GameScene: SKScene {
             worldNode.addChild(cop)
             cops.append(cop)
         }
+        // Scatter any overflow cops that didn't fit behind cars
+        let overflow = count - chosen.count
+        if overflow > 0 { fallbackFormationWithCount(overflow) }
         return true
     }
 
-    private func fallbackFormation() {
+    private func fallbackFormationWithCount(_ count: Int) {
         formationThreatDir = .zero
         var placed = 0; var attempts = 0
-        while placed < copCount && attempts < 300 {
+        while placed < count && attempts < 400 {
             attempts += 1
             let pos = cityMap.randomStreetPoint()
             guard dist(pos, player.position) > 300 else { continue }
-            guard !cops.contains(where: { dist($0.position, pos) < 200 }) else { continue }
+            guard !cops.contains(where: { dist($0.position, pos) < 120 }) else { continue }
             let cop = CopNode()
             cop.position  = pos
             cop.zPosition = 10
@@ -171,7 +178,7 @@ class GameScene: SKScene {
 
     private func spawnSoldiers() {
         var placed = 0; var attempts = 0
-        while placed < soldierCount && attempts < 400 {
+        while placed < soldierCount && attempts < 600 {
             attempts += 1
             let pos = cityMap.randomStreetPoint()
             guard dist(pos, player.position) > 350 else { continue }
@@ -205,6 +212,7 @@ class GameScene: SKScene {
                                    color: SKColor(red: 0.35, green: 1.00, blue: 0.35, alpha: 1))
         humanLabel  = makeHUDLabel(x:  size.width/4,
                                    color: SKColor(red: 0.40, green: 0.75, blue: 1.00, alpha: 1))
+        levelLabel  = makeHUDLabel(x: 0, color: SKColor(red: 1.00, green: 0.85, blue: 0.30, alpha: 1))
         refreshHUD()
     }
 
@@ -222,6 +230,7 @@ class GameScene: SKScene {
     private func refreshHUD() {
         zombieLabel.text = "🧟  \(aiZombies.count + 1)"
         humanLabel.text  = "🧑  \(humans.count + cops.count + soldiers.count)"
+        levelLabel.text  = "LVL \(currentLevel)"
     }
 
     // MARK: - Update loop
@@ -240,7 +249,7 @@ class GameScene: SKScene {
         checkBites()
         clampCamera()
 
-        if humans.isEmpty && cops.isEmpty && soldiers.isEmpty { showWin() }
+        if humans.isEmpty && cops.isEmpty && soldiers.isEmpty && !levelingUp { advanceLevel() }
     }
 
     // MARK: - Movement
@@ -349,7 +358,10 @@ class GameScene: SKScene {
     private func updateCops(dt: TimeInterval) {
         for cop in cops {
             let nearestZ = nearestZombieInRange(of: cop)
-            if let dir = cop.update(dt: dt, toward: nearestZ) {
+            let visibleZ = nearestZ.flatMap { z in
+                cityMap.hasLineOfSight(from: cop.position, to: z.position) ? z : nil
+            }
+            if let dir = cop.update(dt: dt, toward: visibleZ) {
                 spawnBullet(direction: dir, from: cop.position)
             } else if nearestZ == nil && formationThreatDir != .zero {
                 cop.lookAt(CGPoint(x: cop.position.x + formationThreatDir.dx * 100,
@@ -361,7 +373,10 @@ class GameScene: SKScene {
     private func updateSoldiers(dt: TimeInterval) {
         for soldier in soldiers {
             let nearestZ = nearestZombieInRange(ofSoldier: soldier)
-            if let dir = soldier.update(dt: dt, toward: nearestZ) {
+            let visibleZ = nearestZ.flatMap { z in
+                cityMap.hasLineOfSight(from: soldier.position, to: z.position) ? z : nil
+            }
+            if let dir = soldier.update(dt: dt, toward: visibleZ) {
                 spawnBullet(direction: dir, from: soldier.position)
             }
         }
@@ -719,17 +734,93 @@ class GameScene: SKScene {
         evoBadgeLabel.text = "\(evolutionPoints)"
     }
 
-    // MARK: - Screens
+    // MARK: - Level system
 
-    private func showWin() {
-        gameOver = true
+    private func advanceLevel() {
+        levelingUp = true
         joystick.reset()
-        showEndScreen(title: "INFECTION COMPLETE",
-                      sub: "All \(aiZombies.count + 1) zombies on the streets",
-                      titleColor: .white,
-                      bgColor: SKColor(red: 0, green: 0.22, blue: 0, alpha: 0.88),
-                      borderColor: SKColor(red: 0.25, green: 1, blue: 0.25, alpha: 0.70))
+        currentLevel += 1
+
+        let nextCops     = copCount     + (currentLevel - 1) * 6
+        let nextSoldiers = soldierCount + (currentLevel - 1) * 2
+
+        showLevelBanner(level: currentLevel, cops: nextCops, soldiers: nextSoldiers) { [weak self] in
+            guard let self else { return }
+            self.spawnLevelForces(cops: nextCops, soldiers: nextSoldiers)
+            self.levelingUp = false
+        }
     }
+
+    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, completion: @escaping () -> Void) {
+        let overlay = SKShapeNode(rectOf: CGSize(width: size.width * 0.78, height: 160), cornerRadius: 16)
+        overlay.fillColor   = SKColor(red: 0.04, green: 0.10, blue: 0.04, alpha: 0.94)
+        overlay.strokeColor = SKColor(red: 0.25, green: 1.00, blue: 0.25, alpha: 0.70)
+        overlay.lineWidth   = 2.5
+        overlay.zPosition   = 200
+        gameCamera.addChild(overlay)
+
+        let title = centeredLabel("LEVEL \(level)", font: "Menlo-Bold", size: 36,
+                                  color: SKColor(red: 0.30, green: 1.00, blue: 0.30, alpha: 1), y: 38)
+        title.zPosition = 201; gameCamera.addChild(title)
+
+        let sub = centeredLabel("Reinforcements incoming…", font: "Menlo", size: 16,
+                                color: SKColor(white: 0.80, alpha: 1), y: 4)
+        sub.zPosition = 201; gameCamera.addChild(sub)
+
+        let detail = centeredLabel("👮 \(cops)   🪖 \(soldiers)", font: "Menlo-Bold", size: 18,
+                                   color: SKColor(red: 1.00, green: 0.80, blue: 0.30, alpha: 1), y: -30)
+        detail.zPosition = 201; gameCamera.addChild(detail)
+
+        let nodes = [overlay, title, sub, detail]
+        let wait  = SKAction.wait(forDuration: 2.8)
+        let fade  = SKAction.fadeOut(withDuration: 0.5)
+        run(.sequence([wait, .run {
+            nodes.forEach { $0.run(.sequence([fade, .removeFromParent()])) }
+        }, .wait(forDuration: 0.5), .run(completion)]))
+    }
+
+    private func spawnLevelForces(cops copsToSpawn: Int, soldiers soldiersToSpawn: Int) {
+
+        // Respawn humans too so the level has targets
+        var placed = 0; var attempts = 0
+        while placed < humanCount && attempts < 500 {
+            attempts += 1
+            let pos = cityMap.randomStreetPoint()
+            guard dist(pos, player.position) > 250 else { continue }
+            let h = CharacterNode(type: .human)
+            h.position     = pos
+            h.zPosition    = 10
+            h.wanderTarget = cityMap.randomStreetPoint()
+            worldNode.addChild(h)
+            humans.append(h)
+            placed += 1
+        }
+
+        // Cops — try formation, fall back to scatter
+        if !buildFormationWithCount(copsToSpawn) {
+            fallbackFormationWithCount(copsToSpawn)
+        }
+
+        // Soldiers — scatter
+        placed = 0; attempts = 0
+        while placed < soldiersToSpawn && attempts < 600 {
+            attempts += 1
+            let pos = cityMap.randomStreetPoint()
+            guard dist(pos, player.position) > 350 else { continue }
+            guard !cops.contains(where: { dist($0.position, pos) < 120 }) else { continue }
+            guard !soldiers.contains(where: { dist($0.position, pos) < 200 }) else { continue }
+            let s = SoldierNode()
+            s.position  = pos
+            s.zPosition = 10
+            worldNode.addChild(s)
+            soldiers.append(s)
+            placed += 1
+        }
+
+        refreshHUD()
+    }
+
+    // MARK: - Screens
 
     private func showGameOver() {
         showEndScreen(title: "YOU WERE SHOT",
