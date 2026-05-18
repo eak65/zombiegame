@@ -9,6 +9,10 @@ class CharacterNode: SKNode {
     var target:       SKNode?    // AI zombies — CharacterNode (human) or CopNode
     var wanderTarget: CGPoint?   // humans
 
+    // Stuck-detection / escape
+    var stuckTimer:    TimeInterval = 0
+    var stuckWaypoint: CGPoint?     = nil
+
     // HP — only meaningful for zombies; set when becomeZombie() is called
     private(set) var hp: CGFloat = 100
     static var maxHP: CGFloat    = 100

@@ -278,6 +278,12 @@ class GameScene: SKScene {
 
     private func updateAI(dt: TimeInterval) {
         for zombie in aiZombies {
+            // Immediately escape if somehow inside a building
+            if cityMap.isInBuilding(zombie.position, radius: 10) {
+                zombie.stuckWaypoint = nearestStreetPoint(to: zombie.position)
+                zombie.stuckTimer    = 0
+            }
+
             // Re-target if needed (targets humans AND cops)
             if zombie.target == nil
                 || zombie.target?.parent == nil
@@ -286,19 +292,56 @@ class GameScene: SKScene {
                 || (zombie.target as? SoldierNode)?.isBeingBitten == true {
                 zombie.target = nearestNonZombie(to: zombie)
             }
-            guard let target = zombie.target else { continue }
 
-            let dx = target.position.x - zombie.position.x
-            let dy = target.position.y - zombie.position.y
+            // Decide movement goal: waypoint takes priority over normal target
+            let goalPos: CGPoint
+            if let wp = zombie.stuckWaypoint {
+                if dist(zombie.position, wp) < 30 {
+                    zombie.stuckWaypoint = nil
+                    zombie.stuckTimer    = 0
+                    goalPos = zombie.target.map { $0.position } ?? wp
+                } else {
+                    goalPos = wp
+                }
+            } else {
+                guard let target = zombie.target else { continue }
+                goalPos = target.position
+            }
+
+            let dx = goalPos.x - zombie.position.x
+            let dy = goalPos.y - zombie.position.y
             let d  = sqrt(dx*dx + dy*dy)
             guard d > 1 else { continue }
 
+            let prevPos = zombie.position
             let speed = effectiveAISpeed * cityMap.speedMultiplier(at: zombie.position)
             let raw   = CGPoint(x: zombie.position.x + (dx/d) * speed * CGFloat(dt),
                                 y: zombie.position.y + (dy/d) * speed * CGFloat(dt))
             zombie.position = cityMap.resolve(newPos: clampToWorld(raw), from: zombie.position)
             zombie.faceDirection(CGVector(dx: dx, dy: dy))
+
+            // Stuck detection: if barely moved, count up; assign escape waypoint
+            let moved = dist(zombie.position, prevPos)
+            if moved < 0.5 {
+                zombie.stuckTimer += dt
+                if zombie.stuckTimer > 1.0 && zombie.stuckWaypoint == nil {
+                    zombie.stuckWaypoint = nearestStreetPoint(to: zombie.position)
+                    zombie.stuckTimer    = 0
+                }
+            } else {
+                zombie.stuckTimer = 0
+            }
         }
+    }
+
+    private func nearestStreetPoint(to pos: CGPoint) -> CGPoint {
+        let xs = cityMap.streetCenterXs
+        let ys = cityMap.streetCenterYs
+        let nx = xs.min(by: { abs($0 - pos.x) < abs($1 - pos.x) }) ?? pos.x
+        let ny = ys.min(by: { abs($0 - pos.y) < abs($1 - pos.y) }) ?? pos.y
+        // Add small random jitter so multiple stuck zombies don't pick identical waypoints
+        let jitter: CGFloat = CGFloat.random(in: -20...20)
+        return CGPoint(x: nx + jitter, y: ny + jitter)
     }
 
     // MARK: - Cops
