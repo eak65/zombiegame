@@ -782,15 +782,22 @@ class GameScene: SKScene {
     private func regroupZombies() {
         let xs = cityMap.streetCenterXs.sorted()
         let ys = cityMap.streetCenterYs.sorted()
-        let origin = CGPoint(x: xs.first ?? 100, y: ys.first ?? 100)
 
-        // Spread zombies in a small cluster around the corner
+        // Build a pool of guaranteed-clear intersections in the bottom-left area
+        var slots: [CGPoint] = []
+        for xi in 0..<min(3, xs.count) {
+            for yi in 0..<min(3, ys.count) {
+                slots.append(CGPoint(x: xs[xi], y: ys[yi]))
+            }
+        }
+
         let allZombies: [CharacterNode] = [player] + aiZombies
         for (i, zombie) in allZombies.enumerated() {
-            let col = i % 4
-            let row = i / 4
-            zombie.position = CGPoint(x: origin.x + CGFloat(col) * 30,
-                                      y: origin.y + CGFloat(row) * 30)
+            let base = slots[i % slots.count]
+            // Streets are 84px wide; stay within ±15px so we never leave the road
+            let pos = CGPoint(x: base.x + CGFloat.random(in: -15...15),
+                              y: base.y + CGFloat.random(in: -15...15))
+            zombie.position  = pos
             zombie.stuckTimer    = 0
             zombie.stuckWaypoint = nil
         }
