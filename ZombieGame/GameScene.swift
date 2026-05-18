@@ -779,7 +779,26 @@ class GameScene: SKScene {
         }, .wait(forDuration: 0.5), .run(completion)]))
     }
 
+    private func regroupZombies() {
+        let xs = cityMap.streetCenterXs.sorted()
+        let ys = cityMap.streetCenterYs.sorted()
+        let origin = CGPoint(x: xs.first ?? 100, y: ys.first ?? 100)
+
+        // Spread zombies in a small cluster around the corner
+        let allZombies: [CharacterNode] = [player] + aiZombies
+        for (i, zombie) in allZombies.enumerated() {
+            let col = i % 4
+            let row = i / 4
+            zombie.position = CGPoint(x: origin.x + CGFloat(col) * 30,
+                                      y: origin.y + CGFloat(row) * 30)
+            zombie.stuckTimer    = 0
+            zombie.stuckWaypoint = nil
+        }
+    }
+
     private func spawnLevelForces(cops copsToSpawn: Int, soldiers soldiersToSpawn: Int) {
+        // Regroup all zombies at the bottom-left street corner
+        regroupZombies()
 
         // Respawn humans too so the level has targets
         var placed = 0; var attempts = 0
