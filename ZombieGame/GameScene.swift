@@ -533,7 +533,7 @@ class GameScene: SKScene {
 
     private func startBiteHuman(_ human: CharacterNode, from biter: CharacterNode) {
         human.isBeingBitten    = true
-        human.pendingZombieType = (biter === player) ? activeConversionType : .standard
+        human.pendingZombieType = (biter === player) ? activeConversionType : biter.zombieType
 
         let dx  = human.position.x - biter.position.x
         let dy  = human.position.y - biter.position.y
