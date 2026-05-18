@@ -17,7 +17,8 @@ class GameScene: SKScene {
     private let humanCount  = 20
     private let copCount     = 18
     private let soldierCount = 5
-    private let tankCount    = 2
+    private let tankCount       = 2
+    private let scientistCount  = 1
 
     // MARK: - State
     private var cityMap:    CityMap!
@@ -29,8 +30,9 @@ class GameScene: SKScene {
     private var humans:     [CharacterNode] = []
     private var cops:       [CopNode]       = []
     private var soldiers:   [SoldierNode]   = []
-    private var tanks:      [TankNode]      = []
-    private var bullets:    [BulletNode]    = []
+    private var tanks:       [TankNode]       = []
+    private var scientists:  [ScientistNode]  = []
+    private var bullets:     [BulletNode]     = []
 
     private var unlockedZombieTypes:  Set<ZombieType> = [.standard]
     private var activeConversionType: ZombieType      = .standard
@@ -77,6 +79,7 @@ class GameScene: SKScene {
         spawnCops()
         spawnSoldiers()
         spawnTanks(count: tankCount)
+        spawnScientists(count: scientistCount)
         setupJoystick()
         setupHUD()
         setupEvolutionUI()
@@ -238,7 +241,8 @@ class GameScene: SKScene {
 
     private func refreshHUD() {
         zombieLabel.text = "🧟  \(aiZombies.count + 1)"
-        humanLabel.text  = "🧑  \(humans.count + cops.count + soldiers.count)  💣 \(tanks.count)"
+        let enemies = humans.count + cops.count + soldiers.count + tanks.count + scientists.count
+        humanLabel.text  = "🧑  \(enemies)"
         levelLabel.text  = "LVL \(currentLevel)"
     }
 
@@ -255,11 +259,12 @@ class GameScene: SKScene {
         updateCops(dt: dt)
         updateSoldiers(dt: dt)
         updateTanks(dt: dt)
+        updateScientists(dt: dt)
         updateBullets(dt: dt)
         checkBites()
         clampCamera()
 
-        if humans.isEmpty && cops.isEmpty && soldiers.isEmpty && tanks.isEmpty && !levelingUp { advanceLevel() }
+        if humans.isEmpty && cops.isEmpty && soldiers.isEmpty && tanks.isEmpty && scientists.isEmpty && !levelingUp { advanceLevel() }
     }
 
     // MARK: - Movement
@@ -373,7 +378,7 @@ class GameScene: SKScene {
                 cityMap.hasLineOfSight(from: cop.position, to: z.position) ? z : nil
             }
             if let dir = cop.update(dt: dt, toward: visibleZ) {
-                spawnBullet(direction: dir, from: cop.position)
+                spawnBullet(direction: dir, from: cop.position, damage: 35)
             } else if nearestZ == nil && formationThreatDir != .zero {
                 cop.lookAt(CGPoint(x: cop.position.x + formationThreatDir.dx * 100,
                                    y: cop.position.y + formationThreatDir.dy * 100))
@@ -388,7 +393,7 @@ class GameScene: SKScene {
                 cityMap.hasLineOfSight(from: soldier.position, to: z.position) ? z : nil
             }
             if let dir = soldier.update(dt: dt, toward: visibleZ) {
-                spawnBullet(direction: dir, from: soldier.position)
+                spawnBullet(direction: dir, from: soldier.position, damage: 45)
             }
         }
     }
@@ -409,8 +414,9 @@ class GameScene: SKScene {
 
     // MARK: - Bullets
 
-    private func spawnBullet(direction: CGVector, from origin: CGPoint) {
-        let bullet = BulletNode(direction: direction, from: origin)
+    private func spawnBullet(direction: CGVector, from origin: CGPoint,
+                             damage: CGFloat = 35, isCure: Bool = false) {
+        let bullet = BulletNode(direction: direction, from: origin, damage: damage, isCure: isCure)
         worldNode.addChild(bullet)
         bullets.append(bullet)
     }
@@ -420,30 +426,33 @@ class GameScene: SKScene {
         let allZombies: [CharacterNode] = [player] + aiZombies
 
         for (i, bullet) in bullets.enumerated() {
-            let expired     = bullet.advance(dt: dt)
-            let inBuilding  = cityMap.isInBuilding(bullet.position, radius: 2)
+            let expired    = bullet.advance(dt: dt)
+            let inBuilding = cityMap.isInBuilding(bullet.position, radius: 2)
 
-            // Check hits against all zombies
             var hit = false
             for zombie in allZombies {
                 guard dist(bullet.position, zombie.position) < 22 else { continue }
                 bullet.spawnImpact()
                 hit = true
 
-                if zombie.takeDamage(BulletNode.damage) {
-                    // Zombie died
-                    if zombie === player {
-                        playerDied()
-                    } else {
-                        zombieDied(zombie)
+                if bullet.isCure {
+                    // Cure needle — convert back to human if enough hits
+                    if zombie.takeCureHit() {
+                        if zombie === player {
+                            playerCured()
+                        } else {
+                            convertZombieToHuman(zombie)
+                        }
+                    }
+                } else {
+                    if zombie.takeDamage(bullet.damage) {
+                        if zombie === player { playerDied() } else { zombieDied(zombie) }
                     }
                 }
                 break
             }
 
             if hit || expired || inBuilding {
-                if !hit && !inBuilding { /* expired naturally, no spark needed */ }
-                else if inBuilding || expired { /* silent removal */ }
                 bullet.removeFromParent()
                 toRemove.append(i)
             }
@@ -454,9 +463,10 @@ class GameScene: SKScene {
     // MARK: - Bite logic
 
     private func checkBites() {
-        var humansToConvert:   [(CharacterNode, CharacterNode)] = []
-        var copsToConvert:     [CopNode]     = []
-        var soldiersToConvert: [SoldierNode] = []
+        var humansToConvert:     [(CharacterNode, CharacterNode)] = []
+        var copsToConvert:       [CopNode]       = []
+        var soldiersToConvert:   [SoldierNode]   = []
+        var scientistsToConvert: [ScientistNode] = []
 
         let allZombies: [CharacterNode] = [player] + aiZombies
 
@@ -482,11 +492,43 @@ class GameScene: SKScene {
                 guard isTargeted, dist(zombie.position, soldier.position) < br else { continue }
                 if !soldiersToConvert.contains(where: { $0 === soldier }) { soldiersToConvert.append(soldier) }
             }
+            for scientist in scientists {
+                guard !scientist.isBeingBitten else { continue }
+                let isTargeted = (zombie === player) || (zombie.target === scientist)
+                guard isTargeted, dist(zombie.position, scientist.position) < br else { continue }
+                if !scientistsToConvert.contains(where: { $0 === scientist }) { scientistsToConvert.append(scientist) }
+            }
         }
 
-        humansToConvert.forEach   { startBiteHuman($0.0, from: $0.1) }
-        copsToConvert.forEach     { startBiteCop($0) }
-        soldiersToConvert.forEach { startBiteSoldier($0) }
+        humansToConvert.forEach     { startBiteHuman($0.0, from: $0.1) }
+        copsToConvert.forEach       { startBiteCop($0) }
+        soldiersToConvert.forEach   { startBiteSoldier($0) }
+        scientistsToConvert.forEach { startBiteScientist($0) }
+    }
+
+    private func startBiteScientist(_ scientist: ScientistNode) {
+        scientist.isBeingBitten = true
+        scientist.playBiteAnimation()
+        run(.sequence([
+            .wait(forDuration: 0.75),
+            .run { [weak self, weak scientist] in
+                guard let self, let scientist else { return }
+                self.convertScientistToZombie(scientist)
+            }
+        ]))
+    }
+
+    private func convertScientistToZombie(_ scientist: ScientistNode) {
+        scientists.removeAll { $0 === scientist }
+        scientist.removeFromParent()
+        let zombie = CharacterNode(type: .aiZombie)
+        zombie.position  = scientist.position
+        zombie.zPosition = 10
+        worldNode.addChild(zombie)
+        aiZombies.append(zombie)
+        zombie.target = nearestNonZombie(to: zombie)
+        awardEvolutionPoint()
+        refreshHUD()
     }
 
     private func startBiteHuman(_ human: CharacterNode, from biter: CharacterNode) {
@@ -784,16 +826,19 @@ class GameScene: SKScene {
 
         let nextCops     = copCount     + (currentLevel - 1) * 6
         let nextSoldiers = soldierCount + (currentLevel - 1) * 2
-        let nextTanks    = tankCount    + (currentLevel - 1)
+        let nextTanks      = tankCount      + (currentLevel - 1)
+        let nextScientists = scientistCount + (currentLevel - 1)
 
-        showLevelBanner(level: currentLevel, cops: nextCops, soldiers: nextSoldiers, tanks: nextTanks) { [weak self] in
+        showLevelBanner(level: currentLevel, cops: nextCops, soldiers: nextSoldiers,
+                        tanks: nextTanks, scientists: nextScientists) { [weak self] in
             guard let self else { return }
-            self.spawnLevelForces(cops: nextCops, soldiers: nextSoldiers, tanks: nextTanks)
+            self.spawnLevelForces(cops: nextCops, soldiers: nextSoldiers,
+                                  tanks: nextTanks, scientists: nextScientists)
             self.levelingUp = false
         }
     }
 
-    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, tanks: Int, completion: @escaping () -> Void) {
+    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, tanks: Int, scientists: Int, completion: @escaping () -> Void) {
         let overlay = SKShapeNode(rectOf: CGSize(width: size.width * 0.78, height: 170), cornerRadius: 16)
         overlay.fillColor   = SKColor(red: 0.04, green: 0.10, blue: 0.04, alpha: 0.94)
         overlay.strokeColor = SKColor(red: 0.25, green: 1.00, blue: 0.25, alpha: 0.70)
@@ -809,7 +854,7 @@ class GameScene: SKScene {
                                 color: SKColor(white: 0.80, alpha: 1), y: 10)
         sub.zPosition = 201; gameCamera.addChild(sub)
 
-        let detail = centeredLabel("👮 \(cops)  🪖 \(soldiers)  💣 \(tanks)", font: "Menlo-Bold", size: 16,
+        let detail = centeredLabel("👮 \(cops)  🪖 \(soldiers)  💣 \(tanks)  👨‍🔬 \(scientists)", font: "Menlo-Bold", size: 14,
                                    color: SKColor(red: 1.00, green: 0.80, blue: 0.30, alpha: 1), y: -20)
         detail.zPosition = 201; gameCamera.addChild(detail)
 
@@ -845,7 +890,8 @@ class GameScene: SKScene {
         }
     }
 
-    private func spawnLevelForces(cops copsToSpawn: Int, soldiers soldiersToSpawn: Int, tanks tanksToSpawn: Int) {
+    private func spawnLevelForces(cops copsToSpawn: Int, soldiers soldiersToSpawn: Int,
+                                  tanks tanksToSpawn: Int, scientists scientistsToSpawn: Int) {
         // Regroup all zombies at the bottom-left street corner
         regroupZombies()
 
@@ -886,6 +932,7 @@ class GameScene: SKScene {
         }
 
         spawnTanks(count: tanksToSpawn)
+        spawnScientists(count: scientistsToSpawn)
         refreshHUD()
     }
 
@@ -945,6 +992,10 @@ class GameScene: SKScene {
         for t in tanks {  // always targetable — multiple zombies can swarm
             let d = dist(node.position, t.position)
             if d < bestDist { bestDist = d; best = t }
+        }
+        for sc in scientists where !sc.isBeingBitten {
+            let d = dist(node.position, sc.position)
+            if d < bestDist { bestDist = d; best = sc }
         }
         return best
     }
@@ -1075,6 +1126,89 @@ class GameScene: SKScene {
             .group([.scale(to: 9, duration: 0.42), .fadeOut(withDuration: 0.42)]),
             .removeFromParent()
         ]))
+    }
+
+    // MARK: - Scientists
+
+    private func spawnScientists(count: Int) {
+        var placed = 0; var attempts = 0
+        while placed < count && attempts < 400 {
+            attempts += 1
+            let pos = cityMap.randomStreetPoint()
+            guard dist(pos, player.position) > 450 else { continue }
+            guard !scientists.contains(where: { dist($0.position, pos) < 300 }) else { continue }
+            guard !tanks.contains(where: { dist($0.position, pos) < 200 }) else { continue }
+            let s = ScientistNode()
+            s.position  = pos
+            s.zPosition = 10
+            worldNode.addChild(s)
+            scientists.append(s)
+            placed += 1
+        }
+    }
+
+    private func updateScientists(dt: TimeInterval) {
+        for scientist in scientists {
+            let nearestZ = nearestZombieInRange(ofScientist: scientist)
+            let visibleZ = nearestZ.flatMap { z in
+                cityMap.hasLineOfSight(from: scientist.position, to: z.position) ? z : nil
+            }
+            if let dir = scientist.update(dt: dt, toward: visibleZ) {
+                spawnBullet(direction: dir, from: scientist.position, damage: 0, isCure: true)
+            }
+        }
+    }
+
+    private func nearestZombieInRange(ofScientist scientist: ScientistNode) -> CharacterNode? {
+        let allZombies: [CharacterNode] = [player] + aiZombies
+        return allZombies
+            .filter { dist(scientist.position, $0.position) <= ScientistNode.shootRange }
+            .min { dist(scientist.position, $0.position) < dist(scientist.position, $1.position) }
+    }
+
+    private func convertZombieToHuman(_ zombie: CharacterNode) {
+        aiZombies.removeAll { $0 === zombie }
+        for z in aiZombies where z.target === zombie { z.target = nil }
+        zombie.becomeHuman()
+        zombie.wanderTarget = cityMap.randomStreetPoint()
+        humans.append(zombie)
+        refreshHUD()
+    }
+
+    private func playerCured() {
+        guard !gameOver else { return }
+        guard let nearest = aiZombies.min(by: {
+            dist($0.position, player.position) < dist($1.position, player.position)
+        }) else {
+            gameOver = true
+            joystick.reset()
+            showGameOver()
+            return
+        }
+        player.becomeHuman()
+        player.wanderTarget = cityMap.randomStreetPoint()
+        humans.append(player)
+        aiZombies.removeAll { $0 === nearest }
+        nearest.becomePlayer()
+        player = nearest
+        refreshHUD()
+        showCuredBanner()
+    }
+
+    private func showCuredBanner() {
+        let title = centeredLabel("CURED!", font: "Menlo-Bold", size: 22,
+                                  color: SKColor(red: 0.20, green: 0.95, blue: 0.95, alpha: 1), y: 20)
+        let sub   = centeredLabel("Possessing nearest zombie…", font: "Menlo", size: 15,
+                                  color: SKColor(white: 0.85, alpha: 1), y: -10)
+        for lbl in [title, sub] {
+            lbl.zPosition = 200
+            lbl.run(.sequence([
+                .wait(forDuration: 1.8),
+                .fadeOut(withDuration: 0.4),
+                .removeFromParent()
+            ]))
+            gameCamera.addChild(lbl)
+        }
     }
 
     // MARK: - Strain selector

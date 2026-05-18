@@ -16,6 +16,7 @@ class CharacterNode: SKNode {
     // Zombie strain
     var zombieType:        ZombieType = .standard
     var pendingZombieType: ZombieType = .standard  // set in startBiteHuman before conversion
+    var cureHits:          Int        = 0          // needle hits from scientists
 
     // HP — per-instance max accounts for zombie type HP multiplier
     private(set) var hp:          CGFloat = 100
@@ -193,18 +194,115 @@ class CharacterNode: SKNode {
         zombieType    = type
         kind          = .aiZombie
         isBeingBitten = false
+        cureHits      = 0
         wanderTarget  = nil
         instanceMaxHP = CharacterNode.maxHP * ZombieTypeData.info(for: type).hpMult
         hp            = instanceMaxHP
-        icon.removeAction(forKey: "breathe")
+
+        icon.removeAllActions()         // clear breathe, infection animations
+        icon.setScale(1.0)              // reset scale left over from breathe animation
+        icon.run(.colorize(withColorBlendFactor: 0, duration: 0))  // clear any colorize
         icon.text = ZombieTypeData.info(for: type).emoji
+
+        // Scale icon by type so strains are visually distinct even at a glance
+        switch type {
+        case .brute:   icon.setScale(1.35)
+        case .hunter:  icon.setScale(1.10)
+        case .stalker: icon.setScale(0.80)
+        default:       icon.setScale(1.00)
+        }
 
         if hpFill == nil { buildHealthBar() }
         refreshHPBar()
+        addStrainGlow(for: type)
 
         run(.sequence([
             .fadeAlpha(to: 0.2, duration: 0.12), .fadeAlpha(to: 1.0, duration: 0.12),
             .fadeAlpha(to: 0.2, duration: 0.12), .fadeAlpha(to: 1.0, duration: 0.12)
         ]))
+    }
+
+    func becomeHuman() {
+        kind          = .human
+        zombieType    = .standard
+        isBeingBitten = false
+        cureHits      = 0
+        target        = nil
+        stuckTimer    = 0
+        stuckWaypoint = nil
+
+        // Remove strain glow and HP bar
+        children.filter { $0.name == "strainGlow" }.forEach { $0.removeFromParent() }
+        hudNode.removeAllChildren()
+        hpFill = nil
+
+        icon.removeAllActions()
+        icon.setScale(1.0)
+        icon.run(.colorize(withColorBlendFactor: 0, duration: 0))
+        icon.text = "🧑"
+        icon.run(.repeatForever(.sequence([
+            .scale(to: 1.08, duration: 1.2),
+            .scale(to: 1.00, duration: 1.2)
+        ])), withKey: "breathe")
+
+        // Flash white-blue (cured)
+        run(.sequence([
+            .fadeAlpha(to: 0.2, duration: 0.08), .fadeAlpha(to: 1.0, duration: 0.08),
+            .fadeAlpha(to: 0.2, duration: 0.08), .fadeAlpha(to: 1.0, duration: 0.08)
+        ]))
+    }
+
+    /// Returns true when enough cure hits have accumulated to convert back to human.
+    func takeCureHit() -> Bool {
+        guard kind == .playerZombie || kind == .aiZombie else { return false }
+        cureHits += 1
+        icon.run(.sequence([
+            .colorize(with: SKColor(red: 0.20, green: 0.95, blue: 0.95, alpha: 1),
+                      colorBlendFactor: 0.75, duration: 0.05),
+            .colorize(withColorBlendFactor: 0, duration: 0.25)
+        ]))
+        return cureHits >= ScientistNode.cureHitsNeeded
+    }
+
+    private func addStrainGlow(for type: ZombieType) {
+        children.filter { $0.name == "strainGlow" }.forEach { $0.removeFromParent() }
+        guard type != .standard else { return }
+
+        let (fillColor, strokeColor, radius, pulseDur): (SKColor, SKColor, CGFloat, Double)
+        switch type {
+        case .hunter:
+            fillColor   = SKColor(red: 1.00, green: 0.55, blue: 0.00, alpha: 0.20)
+            strokeColor = SKColor(red: 1.00, green: 0.65, blue: 0.10, alpha: 0.70)
+            radius = 24; pulseDur = 0.45
+        case .brute:
+            fillColor   = SKColor(red: 0.55, green: 0.00, blue: 0.80, alpha: 0.22)
+            strokeColor = SKColor(red: 0.70, green: 0.10, blue: 1.00, alpha: 0.75)
+            radius = 34; pulseDur = 0.90
+        case .screamer:
+            fillColor   = SKColor(red: 0.80, green: 0.00, blue: 1.00, alpha: 0.18)
+            strokeColor = SKColor(red: 0.90, green: 0.20, blue: 1.00, alpha: 0.65)
+            radius = 22; pulseDur = 0.30
+        case .stalker:
+            fillColor   = SKColor(red: 0.00, green: 0.95, blue: 0.90, alpha: 0.16)
+            strokeColor = SKColor(red: 0.10, green: 1.00, blue: 0.95, alpha: 0.65)
+            radius = 20; pulseDur = 0.20
+        case .spitter:
+            fillColor   = SKColor(red: 0.25, green: 1.00, blue: 0.00, alpha: 0.18)
+            strokeColor = SKColor(red: 0.40, green: 1.00, blue: 0.10, alpha: 0.65)
+            radius = 24; pulseDur = 0.55
+        default: return
+        }
+
+        let glow = SKShapeNode(circleOfRadius: radius)
+        glow.fillColor   = fillColor
+        glow.strokeColor = strokeColor
+        glow.lineWidth   = 2
+        glow.zPosition   = 0
+        glow.name        = "strainGlow"
+        glow.run(.repeatForever(.sequence([
+            .scale(to: 1.35, duration: pulseDur),
+            .scale(to: 1.00, duration: pulseDur)
+        ])))
+        addChild(glow)
     }
 }
