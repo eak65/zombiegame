@@ -369,6 +369,26 @@ class GameScene: SKScene {
         return CGPoint(x: nx + jitter, y: ny + jitter)
     }
 
+    /// Returns `pos` if it is clear of buildings; otherwise the nearest street intersection.
+    /// Uses a 16-pt safety margin to keep newly spawned zombies away from building edges.
+    private func safeZombiePosition(near pos: CGPoint) -> CGPoint {
+        guard cityMap.isInBuilding(pos, radius: 16) else { return pos }
+        let xs = cityMap.streetCenterXs
+        let ys = cityMap.streetCenterYs
+        // Find the closest intersection that is itself clear
+        var best: CGPoint = CGPoint(x: xs[0], y: ys[0])
+        var bestDist = CGFloat.greatestFiniteMagnitude
+        for x in xs {
+            for y in ys {
+                let candidate = CGPoint(x: x, y: y)
+                if cityMap.isInBuilding(candidate, radius: 16) { continue }
+                let d = dist(pos, candidate)
+                if d < bestDist { bestDist = d; best = candidate }
+            }
+        }
+        return best
+    }
+
     // MARK: - Cops
 
     private func updateCops(dt: TimeInterval) {
@@ -522,7 +542,7 @@ class GameScene: SKScene {
         scientists.removeAll { $0 === scientist }
         scientist.removeFromParent()
         let zombie = CharacterNode(type: .aiZombie)
-        zombie.position  = scientist.position
+        zombie.position  = safeZombiePosition(near: scientist.position)
         zombie.zPosition = 10
         worldNode.addChild(zombie)
         aiZombies.append(zombie)
@@ -572,6 +592,7 @@ class GameScene: SKScene {
     private func convertHumanToZombie(_ human: CharacterNode) {
         human.stopInfectionVisual()
         humans.removeAll { $0 === human }
+        human.position = safeZombiePosition(near: human.position)
         human.becomeZombie(type: human.pendingZombieType)
         aiZombies.append(human)
         human.target = nearestNonZombie(to: human)
@@ -584,7 +605,7 @@ class GameScene: SKScene {
         cop.removeFromParent()
 
         let zombie = CharacterNode(type: .aiZombie)
-        zombie.position  = cop.position
+        zombie.position  = safeZombiePosition(near: cop.position)
         zombie.zPosition = 10
         worldNode.addChild(zombie)
         aiZombies.append(zombie)
@@ -610,7 +631,7 @@ class GameScene: SKScene {
         soldier.removeFromParent()
 
         let zombie = CharacterNode(type: .aiZombie)
-        zombie.position  = soldier.position
+        zombie.position  = safeZombiePosition(near: soldier.position)
         zombie.zPosition = 10
         worldNode.addChild(zombie)
         aiZombies.append(zombie)
@@ -881,10 +902,18 @@ class GameScene: SKScene {
         let allZombies: [CharacterNode] = [player] + aiZombies
         for (i, zombie) in allZombies.enumerated() {
             let base = slots[i % slots.count]
-            // Streets are 84px wide; stay within ±15px so we never leave the road
-            let pos = CGPoint(x: base.x + CGFloat.random(in: -15...15),
-                              y: base.y + CGFloat.random(in: -15...15))
-            zombie.position  = pos
+            // Try up to 8 random jitters; fall back to the bare intersection if all clip a wall
+            var placed = false
+            for _ in 0..<8 {
+                let candidate = CGPoint(x: base.x + CGFloat.random(in: -15...15),
+                                        y: base.y + CGFloat.random(in: -15...15))
+                if !cityMap.isInBuilding(candidate, radius: 16) {
+                    zombie.position = candidate
+                    placed = true
+                    break
+                }
+            }
+            if !placed { zombie.position = base }   // bare intersection is always clear
             zombie.stuckTimer    = 0
             zombie.stuckWaypoint = nil
         }
