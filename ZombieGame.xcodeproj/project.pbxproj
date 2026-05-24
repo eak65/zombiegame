@@ -21,6 +21,7 @@
 		DEAD00010000001FCAFEBABE /* ZombieTypeData.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD00010000000FCAFEBABE /* ZombieTypeData.swift */; };
 		DEAD000100000020CAFEBABE /* TankNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000010CAFEBABE /* TankNode.swift */; };
 		DEAD000100000026CAFEBABE /* ScientistNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000025CAFEBABE /* ScientistNode.swift */; };
+		DEAD000100000028CAFEBABE /* TutorialNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAD000100000027CAFEBABE /* TutorialNode.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		DEAD00010000000FCAFEBABE /* ZombieTypeData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZombieTypeData.swift; sourceTree = "<group>"; };
 		DEAD000100000010CAFEBABE /* TankNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TankNode.swift; sourceTree = "<group>"; };
 		DEAD000100000025CAFEBABE /* ScientistNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScientistNode.swift; sourceTree = "<group>"; };
+		DEAD000100000027CAFEBABE /* TutorialNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorialNode.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +71,7 @@
 				DEAD00010000000FCAFEBABE /* ZombieTypeData.swift */,
 				DEAD000100000010CAFEBABE /* TankNode.swift */,
 				DEAD000100000025CAFEBABE /* ScientistNode.swift */,
+				DEAD000100000027CAFEBABE /* TutorialNode.swift */,
 				DEAD000100000006CAFEBABE /* Assets.xcassets */,
 				DEAD000100000008CAFEBABE /* Info.plist */,
 			);
@@ -173,6 +176,7 @@
 				DEAD00010000001FCAFEBABE /* ZombieTypeData.swift in Sources */,
 				DEAD000100000020CAFEBABE /* TankNode.swift in Sources */,
 				DEAD000100000026CAFEBABE /* ScientistNode.swift in Sources */,
+				DEAD000100000028CAFEBABE /* TutorialNode.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

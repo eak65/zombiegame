@@ -64,6 +64,12 @@ class GameScene: SKScene {
     private var currentLevel  = 1
     private var levelingUp    = false
 
+    // Tutorial
+    private var isTutorial        = false
+    private var tutorialStep      = TutorialStep.move
+    private var tutorialNode:     TutorialNode?
+    private var tutorialStartPos: CGPoint = .zero
+
     // MARK: - Lifecycle
 
     override func didMove(to view: SKView) {
@@ -75,15 +81,22 @@ class GameScene: SKScene {
         cityMap.buildScene(into: worldNode)
         setupCamera()
         setupPlayer()
-        spawnHumans()
-        spawnCops()
-        spawnSoldiers()
-        spawnTanks(count: tankCount)
-        spawnScientists(count: scientistCount)
         setupJoystick()
         setupHUD()
         setupEvolutionUI()
         setupStrainSelector()
+
+        let tutorialDone = UserDefaults.standard.bool(forKey: "tutorialCompleted")
+        if tutorialDone {
+            spawnHumans()
+            spawnCops()
+            spawnSoldiers()
+            spawnTanks(count: tankCount)
+            spawnScientists(count: scientistCount)
+        } else {
+            isTutorial = true
+            startTutorial()
+        }
     }
 
     // MARK: - Setup
@@ -264,7 +277,7 @@ class GameScene: SKScene {
         checkBites()
         clampCamera()
 
-        if humans.isEmpty && cops.isEmpty && soldiers.isEmpty && tanks.isEmpty && scientists.isEmpty && !levelingUp { advanceLevel() }
+        if !isTutorial && humans.isEmpty && cops.isEmpty && soldiers.isEmpty && tanks.isEmpty && scientists.isEmpty && !levelingUp { advanceLevel() }
     }
 
     // MARK: - Movement
@@ -277,6 +290,12 @@ class GameScene: SKScene {
                             y: player.position.y + v.dy * speed * CGFloat(dt))
         player.position = cityMap.resolve(newPos: clampToWorld(raw), from: player.position)
         player.faceDirection(v)
+
+        // Tutorial: detect first real movement
+        if isTutorial, tutorialStep == .move,
+           dist(player.position, tutorialStartPos) > 60 {
+            showTutorialStep(.bite)
+        }
     }
 
     private func updateHumans(dt: TimeInterval) {
@@ -555,6 +574,13 @@ class GameScene: SKScene {
         human.isBeingBitten    = true
         human.pendingZombieType = (biter === player) ? activeConversionType : biter.zombieType
 
+        // Tutorial: first bite starts the "watch for conversion" phase
+        if isTutorial, tutorialStep == .bite {
+            tutorialNode?.showStep(.bite,
+                                   title: "Infected! 🦠 Conversion in progress…",
+                                   body:  "The civilian will turn into a zombie shortly")
+        }
+
         let dx  = human.position.x - biter.position.x
         let dy  = human.position.y - biter.position.y
         let len = max(sqrt(dx*dx + dy*dy), 1)
@@ -598,6 +624,11 @@ class GameScene: SKScene {
         human.target = nearestNonZombie(to: human)
         awardEvolutionPoint()
         refreshHUD()
+
+        // Tutorial: first conversion → show EP earned step
+        if isTutorial, tutorialStep == .bite {
+            showTutorialStep(.evoPoint)
+        }
     }
 
     private func convertCopToZombie(_ cop: CopNode) {
@@ -767,6 +798,10 @@ class GameScene: SKScene {
         if !evolutionPanel.isHidden {
             evolutionPanel.refresh(points: evolutionPoints, levels: upgradeLevels())
             joystick.reset()
+            // Tutorial: advance when panel first opened
+            if isTutorial, tutorialStep == .openPanel {
+                showTutorialStep(.buyUpgrade)
+            }
         }
     }
 
@@ -830,6 +865,12 @@ class GameScene: SKScene {
         }
         updateEvoBadge()
         evolutionPanel.refresh(points: evolutionPoints, levels: upgradeLevels())
+
+        // Tutorial: first upgrade purchased → complete the tutorial
+        if isTutorial, tutorialStep == .buyUpgrade {
+            evolutionPanel.isHidden = true
+            showTutorialStep(.complete)
+        }
     }
 
     private func updateEvoBadge() {
@@ -1238,6 +1279,121 @@ class GameScene: SKScene {
             ]))
             gameCamera.addChild(lbl)
         }
+    }
+
+    // MARK: - Tutorial
+
+    private func startTutorial() {
+        // Four civilians placed close to the player on clear street spots
+        let offsets: [CGPoint] = [
+            CGPoint(x:  160, y:    0),
+            CGPoint(x: -160, y:    0),
+            CGPoint(x:    0, y:  160),
+            CGPoint(x:  120, y: -120)
+        ]
+        for offset in offsets {
+            let raw = CGPoint(x: player.position.x + offset.x,
+                              y: player.position.y + offset.y)
+            let pos = safeZombiePosition(near: raw)
+            let h   = CharacterNode(type: .human)
+            h.position     = pos
+            h.zPosition    = 10
+            h.wanderTarget = cityMap.randomStreetPoint()
+            worldNode.addChild(h)
+            humans.append(h)
+        }
+
+        // Seed 3 evolution points so the player can definitely buy something
+        evolutionPoints = 3
+        refreshHUD()
+
+        tutorialStartPos = player.position
+
+        let overlay = TutorialNode(sceneSize: size)
+        overlay.zPosition = 200
+        gameCamera.addChild(overlay)
+        tutorialNode = overlay
+
+        showTutorialStep(.move)
+    }
+
+    private func showTutorialStep(_ step: TutorialStep) {
+        tutorialStep = step
+        guard let tut = tutorialNode else { return }
+
+        let joystickPos = CGPoint(x: -size.width/2 + 110, y: -size.height/2 + 110)
+        let evoBtnPos   = CGPoint(x:  size.width/2 - 75,  y: -size.height/2 + 75)
+
+        switch step {
+        case .move:
+            tut.showStep(.move,
+                         title: "Drag the joystick to move",
+                         body:  "Use the circle in the bottom-left corner",
+                         arrowAt: joystickPos)
+
+        case .bite:
+            tut.showStep(.bite,
+                         title: "Walk into a 🧑 civilian to infect them!",
+                         body:  "Move close enough and the bite happens automatically")
+
+        case .evoPoint:
+            tut.showStep(.evoPoint,
+                         title: "Evolution Point earned! 🧬",
+                         body:  "Infecting civilians grows your horde & rewards EP")
+            tut.flash(label: "+1 EP")
+            // Auto-advance after 2.5 s
+            run(.sequence([
+                .wait(forDuration: 2.5),
+                .run { [weak self] in self?.showTutorialStep(.openPanel) }
+            ]), withKey: "tutAutoAdv")
+
+        case .openPanel:
+            tut.showStep(.openPanel,
+                         title: "Tap 🧬 to open the Virus Lab",
+                         body:  "Spend Evolution Points to upgrade your strain",
+                         arrowAt: evoBtnPos)
+
+        case .buyUpgrade:
+            tut.showStep(.buyUpgrade,
+                         title: "Select an upgrade to evolve!",
+                         body:  "Tap any row to buy — you have 3 EP to spend")
+
+        case .complete:
+            tut.showStep(.complete,
+                         title: "Tutorial complete! 🧟",
+                         body:  "Infect the whole city — good luck!")
+            run(.sequence([
+                .wait(forDuration: 2.8),
+                .run { [weak self] in self?.finishTutorial() }
+            ]), withKey: "tutComplete")
+        }
+    }
+
+    private func finishTutorial() {
+        UserDefaults.standard.set(true, forKey: "tutorialCompleted")
+        tutorialNode?.dismiss {  }
+        tutorialNode = nil
+        isTutorial   = false
+
+        // Spawn the real level forces
+        spawnCops()
+        spawnSoldiers()
+        spawnTanks(count: tankCount)
+        spawnScientists(count: scientistCount)
+
+        // Replenish civilians so level 1 is properly populated
+        spawnHumans()
+
+        // Brief "Level 1 start" banner
+        let banner = centeredLabel("LEVEL 1 — SURVIVE!", font: "Menlo-Bold", size: 20,
+                                   color: SKColor(red: 1, green: 0.85, blue: 0.30, alpha: 1), y: 0)
+        banner.zPosition = 201
+        banner.run(.sequence([
+            .wait(forDuration: 2.0),
+            .fadeOut(withDuration: 0.4),
+            .removeFromParent()
+        ]))
+        gameCamera.addChild(banner)
     }
 
     // MARK: - Strain selector
