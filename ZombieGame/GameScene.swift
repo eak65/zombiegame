@@ -894,14 +894,28 @@ class GameScene: SKScene {
         joystick.reset()
         currentLevel += 1
 
-        let nextCops      = copCount      + (currentLevel - 1) * 6
-        let nextSoldiers  = soldierCount  + (currentLevel - 1) * 2
-        let nextTanks     = currentLevel >= 3 ? tankCount + (currentLevel - 3) : 0
-        let nextScientists = scientistCount + (currentLevel - 1)
-        let nextEscorts   = currentLevel >= 2 ? min(2, currentLevel - 1) : 0
+        // Base forces — scientists ramp faster in later levels
+        let nextCops       = copCount      + (currentLevel - 1) * 6
+        var nextSoldiers   = soldierCount  + (currentLevel - 1) * 2
+        let nextTanks      = currentLevel >= 3 ? tankCount + (currentLevel - 3) : 0
+        var nextScientists = 1 + (currentLevel - 1) + max(0, currentLevel - 3)
+        let nextEscorts    = currentLevel >= 2 ? min(2, currentLevel - 1) : 0
+
+        // Zombie-cap enforcement: if the horde exceeds 50 boost scientists & soldiers
+        let hordeSize = aiZombies.count + 1   // +1 for the player
+        let overflow  = max(0, hordeSize - 50)
+        let bonusScientists = overflow / 8    // +1 scientist per 8 excess zombies
+        let bonusSoldiers   = overflow / 5    // +1 soldier  per 5 excess zombies
+        nextScientists += bonusScientists
+        nextSoldiers   += bonusSoldiers
+
+        let subtitle = overflow > 0
+            ? "⚠️ Horde size \(hordeSize) — reinforcements boosted!"
+            : "Reinforcements incoming…"
 
         showLevelBanner(level: currentLevel, cops: nextCops, soldiers: nextSoldiers,
-                        tanks: nextTanks, scientists: nextScientists, escorts: nextEscorts) { [weak self] in
+                        tanks: nextTanks, scientists: nextScientists, escorts: nextEscorts,
+                        subtitle: subtitle) { [weak self] in
             guard let self else { return }
             self.spawnLevelForces(cops: nextCops, soldiers: nextSoldiers,
                                   tanks: nextTanks, scientists: nextScientists)
@@ -910,7 +924,7 @@ class GameScene: SKScene {
         }
     }
 
-    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, tanks: Int, scientists: Int, escorts: Int = 0, completion: @escaping () -> Void) {
+    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, tanks: Int, scientists: Int, escorts: Int = 0, subtitle: String = "Reinforcements incoming…", completion: @escaping () -> Void) {
         let overlay = SKShapeNode(rectOf: CGSize(width: size.width * 0.78, height: 170), cornerRadius: 16)
         overlay.fillColor   = SKColor(red: 0.04, green: 0.10, blue: 0.04, alpha: 0.94)
         overlay.strokeColor = SKColor(red: 0.25, green: 1.00, blue: 0.25, alpha: 0.70)
@@ -922,8 +936,10 @@ class GameScene: SKScene {
                                   color: SKColor(red: 0.30, green: 1.00, blue: 0.30, alpha: 1), y: 46)
         title.zPosition = 201; gameCamera.addChild(title)
 
-        let sub = centeredLabel("Reinforcements incoming…", font: "Menlo", size: 16,
-                                color: SKColor(white: 0.80, alpha: 1), y: 10)
+        let subColor = subtitle.hasPrefix("⚠️")
+            ? SKColor(red: 1.00, green: 0.65, blue: 0.15, alpha: 1)
+            : SKColor(white: 0.80, alpha: 1)
+        let sub = centeredLabel(subtitle, font: "Menlo", size: 15, color: subColor, y: 10)
         sub.zPosition = 201; gameCamera.addChild(sub)
 
         let escortStr = escorts > 0 ? "  🚶 \(escorts) ESCORT" : ""
