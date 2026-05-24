@@ -577,7 +577,7 @@ class GameScene: SKScene {
 
     private func startBiteHuman(_ human: CharacterNode, from biter: CharacterNode) {
         human.isBeingBitten    = true
-        human.pendingZombieType = activeConversionType
+        human.pendingZombieType = (biter === player) ? activeConversionType : .standard
 
         // Tutorial: first bite starts the "watch for conversion" phase
         if isTutorial, tutorialStep == .bite {
@@ -1620,30 +1620,116 @@ class GameScene: SKScene {
         node.position  = pos
         node.zPosition = 4
 
-        let ring = SKShapeNode(circleOfRadius: 46)
-        ring.fillColor   = SKColor(red: 0.08, green: 0.55, blue: 0.12, alpha: 0.20)
-        ring.strokeColor = SKColor(red: 0.25, green: 0.90, blue: 0.30, alpha: 0.85)
-        ring.lineWidth   = 2.5
-        ring.run(.repeatForever(.sequence([
-            .scale(to: 1.18, duration: 0.75),
-            .scale(to: 1.00, duration: 0.75)
-        ])))
-        node.addChild(ring)
+        // ── Landing pad ──────────────────────────────────────────────
+        let pad = SKShapeNode(circleOfRadius: 38)
+        pad.fillColor   = SKColor(red: 0.05, green: 0.22, blue: 0.08, alpha: 0.70)
+        pad.strokeColor = SKColor(red: 0.25, green: 0.90, blue: 0.30, alpha: 0.90)
+        pad.lineWidth   = 2.5
+        node.addChild(pad)
 
-        let dot = SKShapeNode(circleOfRadius: 9)
-        dot.fillColor   = SKColor(red: 0.30, green: 1.00, blue: 0.35, alpha: 0.90)
-        dot.strokeColor = .clear
-        node.addChild(dot)
+        // "H" helipad marker
+        let hMark = SKLabelNode(fontNamed: "Menlo-Bold")
+        hMark.text                    = "H"
+        hMark.fontSize                = 30
+        hMark.fontColor               = SKColor(red: 0.25, green: 0.90, blue: 0.30, alpha: 0.85)
+        hMark.verticalAlignmentMode   = .center
+        hMark.horizontalAlignmentMode = .center
+        node.addChild(hMark)
 
+        // ── Helicopter hovering above ─────────────────────────────────
+        let heli = makeHelicopterNode()
+        heli.position = CGPoint(x: 0, y: 60)
+        node.addChild(heli)
+
+        // "EXTRACT" label below the pad
         let lbl = SKLabelNode(fontNamed: "Menlo-Bold")
-        lbl.text      = "SAFE ZONE"
-        lbl.fontSize  = 11
-        lbl.fontColor = SKColor(red: 0.30, green: 1.00, blue: 0.35, alpha: 1)
+        lbl.text                    = "EXTRACT"
+        lbl.fontSize                = 11
+        lbl.fontColor               = SKColor(red: 0.30, green: 1.00, blue: 0.35, alpha: 1)
         lbl.horizontalAlignmentMode = .center
-        lbl.position  = CGPoint(x: 0, y: 54)
+        lbl.position                = CGPoint(x: 0, y: -52)
         node.addChild(lbl)
 
         return node
+    }
+
+    private func makeHelicopterNode() -> SKNode {
+        let heli = SKNode()
+
+        // ── Fuselage ──────────────────────────────────────────────────
+        let body = SKShapeNode(rectOf: CGSize(width: 38, height: 16), cornerRadius: 6)
+        body.fillColor   = SKColor(red: 0.22, green: 0.32, blue: 0.22, alpha: 1)
+        body.strokeColor = SKColor(red: 0.38, green: 0.52, blue: 0.38, alpha: 1)
+        body.lineWidth   = 1.5
+        heli.addChild(body)
+
+        // Cockpit glass
+        let glass = SKShapeNode(rectOf: CGSize(width: 13, height: 9), cornerRadius: 3)
+        glass.fillColor   = SKColor(red: 0.55, green: 0.82, blue: 1.00, alpha: 0.80)
+        glass.strokeColor = .clear
+        glass.position    = CGPoint(x: 11, y: 2)
+        heli.addChild(glass)
+
+        // ── Tail boom ────────────────────────────────────────────────
+        let boom = SKShapeNode(rectOf: CGSize(width: 20, height: 5), cornerRadius: 1.5)
+        boom.fillColor   = SKColor(red: 0.18, green: 0.27, blue: 0.18, alpha: 1)
+        boom.strokeColor = .clear
+        boom.position    = CGPoint(x: -19, y: 1)
+        heli.addChild(boom)
+
+        // Tail rotor (spins fast)
+        let tailRotor = SKShapeNode(rectOf: CGSize(width: 2, height: 12), cornerRadius: 1)
+        tailRotor.fillColor   = SKColor(white: 0.75, alpha: 0.85)
+        tailRotor.strokeColor = .clear
+        tailRotor.position    = CGPoint(x: -29, y: 1)
+        tailRotor.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 0.12)))
+        heli.addChild(tailRotor)
+
+        // ── Main rotor mast ──────────────────────────────────────────
+        let mast = SKShapeNode(rectOf: CGSize(width: 3, height: 7), cornerRadius: 1)
+        mast.fillColor   = SKColor(white: 0.55, alpha: 1)
+        mast.strokeColor = .clear
+        mast.position    = CGPoint(x: 0, y: 12)
+        heli.addChild(mast)
+
+        // Main rotor hub + two blades (spins)
+        let hub = SKNode()
+        hub.position = CGPoint(x: 0, y: 16)
+        for angle in [CGFloat(0), .pi / 2] {
+            let blade = SKShapeNode(rectOf: CGSize(width: 54, height: 3), cornerRadius: 1.5)
+            blade.fillColor   = SKColor(white: 0.72, alpha: 0.88)
+            blade.strokeColor = .clear
+            blade.zRotation   = angle
+            hub.addChild(blade)
+        }
+        hub.run(.repeatForever(.rotate(byAngle: -.pi * 2, duration: 0.22)))
+        heli.addChild(hub)
+
+        // ── Landing skids ─────────────────────────────────────────────
+        let skid = SKShapeNode(rectOf: CGSize(width: 30, height: 3), cornerRadius: 1)
+        skid.fillColor   = SKColor(white: 0.42, alpha: 1)
+        skid.strokeColor = .clear
+        skid.position    = CGPoint(x: 0, y: -12)
+        heli.addChild(skid)
+
+        // Blinking nav light
+        let light = SKShapeNode(circleOfRadius: 3)
+        light.fillColor   = SKColor(red: 1.0, green: 0.85, blue: 0.15, alpha: 1)
+        light.strokeColor = .clear
+        light.position    = CGPoint(x: 17, y: -8)
+        light.run(.repeatForever(.sequence([
+            .fadeAlpha(to: 0.10, duration: 0.45),
+            .fadeAlpha(to: 1.00, duration: 0.45)
+        ])))
+        heli.addChild(light)
+
+        // Gentle hover bob
+        heli.run(.repeatForever(.sequence([
+            .moveBy(x: 0, y:  5, duration: 0.85),
+            .moveBy(x: 0, y: -5, duration: 0.85)
+        ])))
+
+        return heli
     }
 
     private func spawnEscapedBanner(at pos: CGPoint, count: Int) {
