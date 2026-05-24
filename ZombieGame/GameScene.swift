@@ -572,7 +572,7 @@ class GameScene: SKScene {
 
     private func startBiteHuman(_ human: CharacterNode, from biter: CharacterNode) {
         human.isBeingBitten    = true
-        human.pendingZombieType = (biter === player) ? activeConversionType : biter.zombieType
+        human.pendingZombieType = activeConversionType
 
         // Tutorial: first bite starts the "watch for conversion" phase
         if isTutorial, tutorialStep == .bite {
