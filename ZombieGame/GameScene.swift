@@ -683,6 +683,9 @@ class GameScene: SKScene {
             .scale(to: 1.28, duration: 0.10),
             .scale(to: 1.00, duration: 0.12)
         ]))
+        if !evolutionPanel.isHidden {
+            evolutionPanel.refresh(points: evolutionPoints, levels: upgradeLevels())
+        }
     }
 
     // MARK: - Zombie death (shot by police)
