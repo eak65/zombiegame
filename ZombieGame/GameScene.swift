@@ -1239,10 +1239,46 @@ class GameScene: SKScene {
     private func convertZombieToHuman(_ zombie: CharacterNode) {
         aiZombies.removeAll { $0 === zombie }
         for z in aiZombies where z.target === zombie { z.target = nil }
+        spawnCureBurst(at: zombie.position)
         zombie.becomeHuman()
         zombie.wanderTarget = cityMap.randomStreetPoint()
         humans.append(zombie)
         refreshHUD()
+    }
+
+    private func spawnCureBurst(at pos: CGPoint) {
+        // Expanding cyan ring
+        let ring = SKShapeNode(circleOfRadius: 10)
+        ring.strokeColor = SKColor(red: 0.20, green: 0.95, blue: 0.95, alpha: 0.90)
+        ring.fillColor   = SKColor(red: 0.15, green: 0.90, blue: 0.90, alpha: 0.25)
+        ring.lineWidth   = 2.5
+        ring.position    = pos
+        ring.zPosition   = 12
+        worldNode.addChild(ring)
+        ring.run(.sequence([
+            .group([
+                .scale(to: 3.2, duration: 0.35),
+                .fadeOut(withDuration: 0.35)
+            ]),
+            .removeFromParent()
+        ]))
+
+        // "CURED" pop label
+        let lbl = SKLabelNode(fontNamed: "Menlo-Bold")
+        lbl.text      = "CURED"
+        lbl.fontSize  = 13
+        lbl.fontColor = SKColor(red: 0.20, green: 1.00, blue: 1.00, alpha: 1)
+        lbl.horizontalAlignmentMode = .center
+        lbl.position  = CGPoint(x: pos.x, y: pos.y + 28)
+        lbl.zPosition = 13
+        worldNode.addChild(lbl)
+        lbl.run(.sequence([
+            .group([
+                .moveBy(x: 0, y: 22, duration: 0.55),
+                .sequence([.wait(forDuration: 0.20), .fadeOut(withDuration: 0.35)])
+            ]),
+            .removeFromParent()
+        ]))
     }
 
     private func playerCured() {

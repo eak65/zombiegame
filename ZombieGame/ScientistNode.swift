@@ -3,11 +3,11 @@ import SpriteKit
 class ScientistNode: SKNode {
 
     static let maxAmmo:      Int          = 6
-    static let fireInterval: TimeInterval = 0.85   // clinical, steady fire
-    static let reloadTime:   TimeInterval = 8.0    // reloading cure dispenser
-    static let shootRange:   CGFloat      = 260
-    static let bulletSpread: CGFloat      = 0.05   // very precise
-    static let cureHitsNeeded: Int        = 3      // hits to cure a zombie
+    static let fireInterval: TimeInterval = 1.10   // each shot is deliberate
+    static let reloadTime:   TimeInterval = 10.0   // reloading cure dispenser
+    static let shootRange:   CGFloat      = 300
+    static let bulletSpread: CGFloat      = 0.04   // very precise
+    static let cureHitsNeeded: Int        = 1      // one needle = instant cure
 
     var isBeingBitten = false
 
