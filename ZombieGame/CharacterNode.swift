@@ -6,6 +6,7 @@ class CharacterNode: SKNode {
 
     private(set) var kind: Kind
     var isBeingBitten = false
+    var isEscorted    = false     // true while member of an EscortGroup
     var target:        SKNode?    // AI zombies — CharacterNode (human) or CopNode / TankNode
     var wanderTarget:  CGPoint?   // humans
 
@@ -194,6 +195,7 @@ class CharacterNode: SKNode {
         zombieType    = type
         kind          = .aiZombie
         isBeingBitten = false
+        isEscorted    = false
         cureHits      = 0
         wanderTarget  = nil
         instanceMaxHP = CharacterNode.maxHP * ZombieTypeData.info(for: type).hpMult
@@ -226,6 +228,7 @@ class CharacterNode: SKNode {
         kind          = .human
         zombieType    = .standard
         isBeingBitten = false
+        isEscorted    = false
         cureHits      = 0
         target        = nil
         stuckTimer    = 0

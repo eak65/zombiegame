@@ -64,6 +64,9 @@ class GameScene: SKScene {
     private var currentLevel  = 1
     private var levelingUp    = false
 
+    // Escort groups
+    private var escortGroups: [EscortGroup] = []
+
     // Tutorial
     private var isTutorial        = false
     private var tutorialStep      = TutorialStep.move
@@ -91,8 +94,8 @@ class GameScene: SKScene {
             spawnHumans()
             spawnCops()
             spawnSoldiers()
-            spawnTanks(count: tankCount)
             spawnScientists(count: scientistCount)
+            // Tanks unlock at level 3
         } else {
             isTutorial = true
             startTutorial()
@@ -267,6 +270,7 @@ class GameScene: SKScene {
         lastTime = currentTime
 
         updatePlayer(dt: dt)
+        updateEscortGroups(dt: dt)
         updateHumans(dt: dt)
         updateAI(dt: dt)
         updateCops(dt: dt)
@@ -300,6 +304,7 @@ class GameScene: SKScene {
 
     private func updateHumans(dt: TimeInterval) {
         for human in humans {
+            guard !human.isEscorted else { continue }   // escort group manages these
             if let wt = human.wanderTarget, dist(human.position, wt) < 18 {
                 human.wanderTarget = cityMap.randomStreetPoint()
             }
@@ -886,21 +891,23 @@ class GameScene: SKScene {
         joystick.reset()
         currentLevel += 1
 
-        let nextCops     = copCount     + (currentLevel - 1) * 6
-        let nextSoldiers = soldierCount + (currentLevel - 1) * 2
-        let nextTanks      = tankCount      + (currentLevel - 1)
+        let nextCops      = copCount      + (currentLevel - 1) * 6
+        let nextSoldiers  = soldierCount  + (currentLevel - 1) * 2
+        let nextTanks     = currentLevel >= 3 ? tankCount + (currentLevel - 3) : 0
         let nextScientists = scientistCount + (currentLevel - 1)
+        let nextEscorts   = currentLevel >= 2 ? min(2, currentLevel - 1) : 0
 
         showLevelBanner(level: currentLevel, cops: nextCops, soldiers: nextSoldiers,
-                        tanks: nextTanks, scientists: nextScientists) { [weak self] in
+                        tanks: nextTanks, scientists: nextScientists, escorts: nextEscorts) { [weak self] in
             guard let self else { return }
             self.spawnLevelForces(cops: nextCops, soldiers: nextSoldiers,
                                   tanks: nextTanks, scientists: nextScientists)
+            self.spawnEscortGroups(count: nextEscorts)
             self.levelingUp = false
         }
     }
 
-    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, tanks: Int, scientists: Int, completion: @escaping () -> Void) {
+    private func showLevelBanner(level: Int, cops: Int, soldiers: Int, tanks: Int, scientists: Int, escorts: Int = 0, completion: @escaping () -> Void) {
         let overlay = SKShapeNode(rectOf: CGSize(width: size.width * 0.78, height: 170), cornerRadius: 16)
         overlay.fillColor   = SKColor(red: 0.04, green: 0.10, blue: 0.04, alpha: 0.94)
         overlay.strokeColor = SKColor(red: 0.25, green: 1.00, blue: 0.25, alpha: 0.70)
@@ -916,7 +923,8 @@ class GameScene: SKScene {
                                 color: SKColor(white: 0.80, alpha: 1), y: 10)
         sub.zPosition = 201; gameCamera.addChild(sub)
 
-        let detail = centeredLabel("👮 \(cops)  🪖 \(soldiers)  💣 \(tanks)  👨‍🔬 \(scientists)", font: "Menlo-Bold", size: 14,
+        let escortStr = escorts > 0 ? "  🚶 \(escorts) ESCORT" : ""
+        let detail = centeredLabel("👮 \(cops)  🪖 \(soldiers)  💣 \(tanks)  👨‍🔬 \(scientists)\(escortStr)", font: "Menlo-Bold", size: 14,
                                    color: SKColor(red: 1.00, green: 0.80, blue: 0.30, alpha: 1), y: -20)
         detail.zPosition = 201; gameCamera.addChild(detail)
 
@@ -929,6 +937,14 @@ class GameScene: SKScene {
     }
 
     private func regroupZombies() {
+        // Discard any lingering escort groups from the previous level
+        for group in escortGroups {
+            group.safeMarker?.removeFromParent()
+            group.escortLabel?.removeFromParent()
+            group.humans.forEach { $0.isEscorted = false }
+        }
+        escortGroups.removeAll()
+
         let xs = cityMap.streetCenterXs.sorted()
         let ys = cityMap.streetCenterYs.sorted()
 
@@ -1411,10 +1427,9 @@ class GameScene: SKScene {
         tutorialNode = nil
         isTutorial   = false
 
-        // Spawn the real level forces
+        // Spawn the real level forces (no tanks until level 3)
         spawnCops()
         spawnSoldiers()
-        spawnTanks(count: tankCount)
         spawnScientists(count: scientistCount)
 
         // Replenish civilians so level 1 is properly populated
@@ -1430,6 +1445,208 @@ class GameScene: SKScene {
             .removeFromParent()
         ]))
         gameCamera.addChild(banner)
+    }
+
+    // MARK: - Escort groups
+
+    private func spawnEscortGroups(count: Int) {
+        for _ in 0..<count { spawnEscortGroup() }
+    }
+
+    private func spawnEscortGroup() {
+        let xs = cityMap.streetCenterXs
+        let ys = cityMap.streetCenterYs
+
+        // Safe zone: upper-right quadrant of the map
+        let destXs = xs.filter { $0 > worldSize.width  * 0.55 }
+        let destYs = ys.filter { $0 > worldSize.height * 0.55 }
+        guard let destX = destXs.randomElement(), let destY = destYs.randomElement() else { return }
+        let dest = CGPoint(x: destX, y: destY)
+
+        // Escort start: anywhere on the map far from player AND safe zone
+        var origin: CGPoint?
+        for _ in 0..<300 {
+            let pos = cityMap.randomStreetPoint()
+            guard dist(pos, player.position) > 420 else { continue }
+            guard dist(pos, dest)             > 480 else { continue }
+            origin = pos; break
+        }
+        guard let origin else { return }
+
+        // Safe-zone marker (in worldNode)
+        let marker = makeEscortSafeMarker(at: dest)
+        worldNode.addChild(marker)
+
+        // Civilians tight cluster around origin
+        let civCount = Int.random(in: 3...5)
+        var groupHumans: [CharacterNode] = []
+        for i in 0..<civCount {
+            let angle = CGFloat(i) / CGFloat(civCount) * 2 * .pi
+            let raw   = CGPoint(x: origin.x + 28 * cos(angle),
+                                y: origin.y + 28 * sin(angle))
+            let pos   = safeZombiePosition(near: raw)
+            let h     = CharacterNode(type: .human)
+            h.position     = pos
+            h.zPosition    = 10
+            h.isEscorted   = true
+            h.wanderTarget = nil
+            worldNode.addChild(h)
+            humans.append(h)
+            groupHumans.append(h)
+        }
+
+        // Escort cops orbiting the cluster
+        let copRing = Int.random(in: 3...4)
+        var groupCops: [CopNode] = []
+        for i in 0..<copRing {
+            let angle = CGFloat(i) / CGFloat(copRing) * 2 * .pi
+            let raw   = CGPoint(x: origin.x + 85 * cos(angle),
+                                y: origin.y + 85 * sin(angle))
+            let pos   = safeZombiePosition(near: raw)
+            let cop   = CopNode()
+            cop.position  = pos
+            cop.zPosition = 10
+            worldNode.addChild(cop)
+            cops.append(cop)
+            groupCops.append(cop)
+        }
+
+        // Floating "ESCORT" label that follows the group centroid
+        let lbl = SKLabelNode(fontNamed: "Menlo-Bold")
+        lbl.text      = "▶ ESCORT"
+        lbl.fontSize  = 11
+        lbl.fontColor = SKColor(red: 0.25, green: 1.00, blue: 0.30, alpha: 0.90)
+        lbl.horizontalAlignmentMode = .center
+        lbl.position  = CGPoint(x: origin.x, y: origin.y + 100)
+        lbl.zPosition = 15
+        worldNode.addChild(lbl)
+
+        let group          = EscortGroup(humans: groupHumans, cops: groupCops, dest: dest)
+        group.safeMarker   = marker
+        group.escortLabel  = lbl
+        escortGroups.append(group)
+        refreshHUD()
+    }
+
+    private func updateEscortGroups(dt: TimeInterval) {
+        var finished: [EscortGroup] = []
+
+        for group in escortGroups {
+            // Prune members lost to infection or conversion
+            group.humans.removeAll { h in !humans.contains { $0 === h } }
+            group.cops.removeAll   { c in !cops.contains   { $0 === c } }
+
+            if group.humans.isEmpty {
+                group.safeMarker?.removeFromParent()
+                group.escortLabel?.removeFromParent()
+                finished.append(group); continue
+            }
+
+            let centre = group.centroid
+            let dx = group.dest.x - centre.x
+            let dy = group.dest.y - centre.y
+            let dd = sqrt(dx*dx + dy*dy)
+
+            // Arrived at safe zone
+            if dd < 55 {
+                let saved = group.humans.count
+                for h in group.humans {
+                    h.isEscorted = false
+                    humans.removeAll { $0 === h }
+                    h.removeFromParent()
+                }
+                group.humans.removeAll()
+                group.safeMarker?.removeFromParent()
+                group.escortLabel?.removeFromParent()
+                spawnEscapedBanner(at: group.dest, count: saved)
+                finished.append(group)
+                refreshHUD(); continue
+            }
+
+            // Move civilians toward safe zone
+            let nx = dx / dd, ny = dy / dd
+            let civStep = group.speed * CGFloat(dt)
+            for h in group.humans {
+                let raw = CGPoint(x: h.position.x + nx * civStep,
+                                  y: h.position.y + ny * civStep)
+                h.position = cityMap.resolve(newPos: clampToWorld(raw), from: h.position)
+                h.faceDirection(CGVector(dx: nx, dy: ny))
+            }
+
+            // Move cops in a protective ring around the centroid
+            let n = max(1, group.cops.count)
+            for (i, cop) in group.cops.enumerated() {
+                let angle = CGFloat(i) / CGFloat(n) * 2 * .pi
+                let orbitPt = CGPoint(x: centre.x + group.orbitRadius * cos(angle),
+                                     y: centre.y + group.orbitRadius * sin(angle))
+                let cdx = orbitPt.x - cop.position.x
+                let cdy = orbitPt.y - cop.position.y
+                let cd  = sqrt(cdx*cdx + cdy*cdy)
+                guard cd > 6 else { continue }
+                let raw = CGPoint(x: cop.position.x + (cdx/cd) * 110 * CGFloat(dt),
+                                  y: cop.position.y + (cdy/cd) * 110 * CGFloat(dt))
+                cop.position = cityMap.resolve(newPos: clampToWorld(raw), from: cop.position)
+            }
+
+            // Keep the label floating above the group
+            group.escortLabel?.position = CGPoint(x: centre.x,
+                                                  y: centre.y + group.orbitRadius + 20)
+        }
+
+        escortGroups.removeAll { g in finished.contains { $0 === g } }
+    }
+
+    private func makeEscortSafeMarker(at pos: CGPoint) -> SKNode {
+        let node = SKNode()
+        node.position  = pos
+        node.zPosition = 4
+
+        let ring = SKShapeNode(circleOfRadius: 46)
+        ring.fillColor   = SKColor(red: 0.08, green: 0.55, blue: 0.12, alpha: 0.20)
+        ring.strokeColor = SKColor(red: 0.25, green: 0.90, blue: 0.30, alpha: 0.85)
+        ring.lineWidth   = 2.5
+        ring.run(.repeatForever(.sequence([
+            .scale(to: 1.18, duration: 0.75),
+            .scale(to: 1.00, duration: 0.75)
+        ])))
+        node.addChild(ring)
+
+        let dot = SKShapeNode(circleOfRadius: 9)
+        dot.fillColor   = SKColor(red: 0.30, green: 1.00, blue: 0.35, alpha: 0.90)
+        dot.strokeColor = .clear
+        node.addChild(dot)
+
+        let lbl = SKLabelNode(fontNamed: "Menlo-Bold")
+        lbl.text      = "SAFE ZONE"
+        lbl.fontSize  = 11
+        lbl.fontColor = SKColor(red: 0.30, green: 1.00, blue: 0.35, alpha: 1)
+        lbl.horizontalAlignmentMode = .center
+        lbl.position  = CGPoint(x: 0, y: 54)
+        node.addChild(lbl)
+
+        return node
+    }
+
+    private func spawnEscapedBanner(at pos: CGPoint, count: Int) {
+        let node = SKNode()
+        node.position  = pos
+        node.zPosition = 20
+        worldNode.addChild(node)
+
+        let lbl = SKLabelNode(fontNamed: "Menlo-Bold")
+        lbl.text      = "\(count) ESCAPED!"
+        lbl.fontSize  = 16
+        lbl.fontColor = SKColor(red: 0.20, green: 1.00, blue: 0.30, alpha: 1)
+        lbl.horizontalAlignmentMode = .center
+        node.addChild(lbl)
+
+        node.run(.sequence([
+            .group([
+                .moveBy(x: 0, y: 52, duration: 1.8),
+                .sequence([.wait(forDuration: 0.6), .fadeOut(withDuration: 1.2)])
+            ]),
+            .removeFromParent()
+        ]))
     }
 
     // MARK: - Strain selector
@@ -1540,5 +1757,30 @@ class GameScene: SKScene {
         let scene = GameScene(size: size)
         scene.scaleMode = scaleMode
         view?.presentScene(scene, transition: .fade(withDuration: 0.5))
+    }
+}
+
+// MARK: - EscortGroup
+
+private final class EscortGroup {
+    var humans:  [CharacterNode]
+    var cops:    [CopNode]
+    let dest:    CGPoint
+    weak var safeMarker:  SKNode?
+    weak var escortLabel: SKLabelNode?
+
+    let speed:       CGFloat = 42   // px/s — brisk walking pace
+    let orbitRadius: CGFloat = 80
+
+    init(humans: [CharacterNode], cops: [CopNode], dest: CGPoint) {
+        self.humans = humans; self.cops = cops; self.dest = dest
+    }
+
+    var centroid: CGPoint {
+        guard !humans.isEmpty else { return dest }
+        var sx: CGFloat = 0, sy: CGFloat = 0
+        for h in humans { sx += h.position.x; sy += h.position.y }
+        let n = CGFloat(humans.count)
+        return CGPoint(x: sx / n, y: sy / n)
     }
 }
